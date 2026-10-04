@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.2 - 2026-10-04
+
+### Fixed
+- The `setup --yes` test no longer depends on whether a screen recorder is installed on the machine running it. (0.2.1 was tagged before this fix; its CI run failed, so it was not published.)
+
 ## 0.2.1 - 2026-10-04
 
 ### Added

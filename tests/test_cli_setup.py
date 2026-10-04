@@ -4,7 +4,7 @@ import types
 
 import pytest
 
-from bugcap import backends, cli
+from bugcap import backends, cli, recorder
 
 
 @pytest.fixture
@@ -49,6 +49,9 @@ def test_prompt_accept_runs_argv(monkeypatch, record_run, tty):
 
 def test_yes_installs_without_prompt(monkeypatch, record_run, tty):
     monkeypatch.setattr(backends, "detect", lambda: None)
+    # Pretend a recorder is present so setup only installs the capture tool
+    # (otherwise it also tries to install ffmpeg, which depends on the machine).
+    monkeypatch.setattr(recorder, "detect_recorder", lambda: types.SimpleNamespace(name="ffmpeg", description="stub"))
     cmd = ["winget", "install", "Flameshot.Flameshot"]
     monkeypatch.setattr(backends, "install_command", lambda b: cmd)
     tty(False)  # even non-interactive, --yes proceeds
