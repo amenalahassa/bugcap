@@ -52,8 +52,8 @@ bugcap keeps the whole loop in one place:
 ## Quick start
 
 ```bash
-# install (from GitHub until the PyPI release is live)
-pipx install 'bugcap[mcp] @ git+https://github.com/amenalahassa/bugcap'
+# install from PyPI
+pipx install 'bugcap[mcp]'
 
 bugcap setup --yes                      # detects or installs a capture tool
 cd ~/code/myproject && bugcap init      # scope reports to this repo
@@ -112,8 +112,8 @@ Requires Python 3.10 or newer. The core CLI uses only the standard library (plus
 Python 3.11). The MCP server is an optional extra.
 
 ```bash
-pipx install 'bugcap[mcp] @ git+https://github.com/amenalahassa/bugcap'   # recommended
-uv tool install 'bugcap[mcp] @ git+https://github.com/amenalahassa/bugcap'
+pipx install 'bugcap[mcp]'   # recommended
+uv tool install 'bugcap[mcp]'
 pip install -e '.[dev,mcp]'                                             # development
 ```
 
