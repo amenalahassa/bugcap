@@ -1,193 +1,146 @@
-# bugcap
+<p align="center">
+  <img src="docs/assets/logo.svg" alt="bugcap" width="96">
+</p>
 
-**A local-first, agent-readable bug capture tool.** Snap an annotated screenshot of whatever's
-broken, jot down what you saw, and keep a plain, local record of it — images and all — that any
-AI coding agent on your machine can actually read, and that you can later push to whichever issue
-tracker the project uses (GitHub first).
+<h1 align="center">bugcap</h1>
 
-## Why this exists
+<p align="center">
+  <b>Bug reports your AI agent can actually read.</b><br>
+  Annotated screenshots and notes, stored on your machine, readable by coding agents over MCP, and synced to GitHub issues when you choose.
+</p>
 
-Reviewing a desktop app for bugs usually produces two disconnected things: a screenshot (saved
-somewhere, annotated or not) and a mental note of what was wrong. By the time you write the issue,
-context is lost, and once the screenshot is attached to the issue, most trackers make it
-*actively unreadable by an API token* — GitHub's `user-attachments` CDN, for example, only
-resolves for a real browser session; no personal access token, OAuth app, or GitHub App token can
-fetch it. That means an AI agent helping you triage bugs (via `gh` CLI or the REST API) can see the
-issue text but never the picture — exactly the thing that usually explains the bug.
+<p align="center">
+  <a href="https://github.com/amenalahassa/bugcap/actions/workflows/release.yml"><img alt="tests" src="https://github.com/amenalahassa/bugcap/actions/workflows/release.yml/badge.svg"></a>
+  <img alt="python" src="https://img.shields.io/badge/python-3.10%2B-3776ab?logo=python&logoColor=white">
+  <a href="LICENSE"><img alt="license" src="https://img.shields.io/badge/license-MIT-green"></a>
+  <a href="https://amenalahassa.github.io/bugcap/"><img alt="docs" src="https://img.shields.io/badge/docs-website-d9480f"></a>
+</p>
 
-`bugcap` fixes the workflow end to end:
+<p align="center">
+  <a href="https://amenalahassa.github.io/bugcap/">Website</a> ·
+  <a href="https://amenalahassa.github.io/bugcap/usage.html">Usage guide</a> ·
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#connect-your-agent-mcp">Agents (MCP)</a> ·
+  <a href="CHANGELOG.md">Changelog</a>
+</p>
 
-1. **Capture + annotate** at the moment you see the bug (shells out to `flameshot`/`satty` — no
-   annotation UI reinvented here).
-2. **Store locally**, as plain files: a SQLite index plus PNGs on disk, independent of any
-   tracker. This is the system of record. Nothing about it depends on GitHub, Jira, Linear, or
-   any other service being reachable or even chosen yet.
-3. **Hand to any agent**: because the store is just local files, any agent with filesystem access
-   (Claude Code, Cursor, etc.) can read a report's screenshot directly — no CDN, no auth dance. A
-   stdio MCP server (`bugcap mcp-serve`) exposes the same store to agents, including the image
-   bytes.
-4. **Sync when ready**: push a report to a real tracker on your own schedule. The GitHub adapter
-   both attaches the image the normal way (so humans get the usual inline image in their browser)
-   **and** commits a plain copy of the file into a repo you choose, so any agent — yours or a
-   teammate's — can read the same bytes back via `gh api repos/<owner>/<repo>/contents/<path>`,
-   sidestepping the CDN's browser-only restriction entirely.
+<p align="center">
+  <img src="docs/assets/demo.gif" alt="bugcap capturing an annotated bug and listing the report" width="760">
+</p>
 
-The result: one capture step, a durable local record, and a sync step that's a deliberate choice
-rather than a one-way trip into a format your tools can't see.
+---
 
-## Status
+## Why bugcap
 
-Working. Roadmap items 1–5, 7 and 8 are implemented and tested (cross-OS paths, `setup`, per-repo
-`init`, scoped capture/list, triage, GitHub pull/attach, GitHub push/sync, and the MCP server).
-Items 6 (S3/R2 object store) and 9 (other trackers) are deferred, but the `Destination` seam is in
-place so they slot in without touching existing commands.
+Reviewing an app for bugs usually leaves you with two disconnected things: a screenshot and a
+mental note. By the time you file the issue, the context is gone. Once the screenshot is attached
+to a GitHub issue, it becomes **unreadable to an API token**. The CDN only resolves in a browser
+session, so an agent using `gh` can read the text but never the picture that explains the bug.
 
-## Installation
+bugcap keeps the whole loop in one place:
 
-Requires Python >= 3.10. The core CLI is standard-library only (plus `tomli` on Python < 3.11);
-the MCP server is an optional extra.
+| | |
+|---|---|
+| 📸 **Capture at the moment** | Annotated screenshots through `flameshot`, `satty` or `screencapture`. No new annotation UI. |
+| 🗂️ **Local record** | A SQLite index and PNGs on disk. Nothing depends on GitHub being reachable. |
+| 🤖 **Agent-readable** | A stdio MCP server hands reports, images included, to Claude Code and other agents. |
+| 🔁 **Sync when ready** | Push to a GitHub issue with the usual inline image, plus a plain copy agents can read. |
+| 🎞️ **Record what happens** | Short screen recordings as animated GIF, video or keyframes, with size caps. |
+| 🖥️ **Triage in a browser** | A local dashboard on `127.0.0.1` to browse, filter and set statuses. |
+| 🪟 **Live mode** | An always-on-top window for reporting many bugs in a row. |
 
-```bash
-# System-wide (recommended):
-pipx install .            # core CLI
-pipx install '.[mcp]'     # core CLI + MCP server
-# or with uv:
-uv tool install '.[mcp]'
-# for local development:
-pip install -e '.[dev,mcp]'
-```
-
-Then make sure a capture tool is available for your OS:
+## Quick start
 
 ```bash
-bugcap setup              # reports the detected tool, or recommends one
-bugcap setup --yes        # also installs it via your package manager (no prompt)
-```
+# install (from GitHub until the PyPI release is live)
+pipx install 'bugcap[mcp] @ git+https://github.com/amenalahassa/bugcap'
 
-Supported capture backends: [`flameshot`](https://flameshot.org/) (cross-platform, recommended),
-[`satty`](https://github.com/Satty-org/Satty) + `grim` (Linux/Wayland), and `screencapture`
-(macOS built-in). If no tool is available you can always import an existing image with
-`bugcap capture --image PATH`.
+bugcap setup --yes                      # detects or installs a capture tool
+cd ~/code/myproject && bugcap init      # scope reports to this repo
 
-## Usage
-
-```bash
-# One-time, inside a project repo: scope captures to this repo (tag + GitHub slug auto-detected).
-bugcap init                         # or: bugcap init --tag myproj --github owner/repo
-bugcap init --images-repo owner/assets   # optionally pin where synced image copies are committed
-
-# Capture (or import) a screenshot, annotate it, then describe the bug.
-bugcap capture --title "Dashboard empty after module creation" \
-                --note "Created Activity Tracking module, dashboard shows no widgets" \
-                --tag ui
-bugcap capture --image ./shot.png --title "Broken" --note "no capture tool needed"
-
-# Images: attach existing files, globs or URLs (validated, copied into the store), with labels.
-bugcap capture --image ./a.png --label login-error --title "Login fails" --note "See @1 and @login-error"
-bugcap attach <id> --image './shots/*.png' --image https://ci.example.com/run/42.png --label after-fix
-bugcap images <id>                              # index, label, kind, size
-bugcap images <id> relabel login-error sign-in  # refused while notes reference it, unless --force
-bugcap images <id> remove 2 --force             # rewrites @ references (removed ones: [image removed])
-
-# Record the screen (needs ffmpeg, or wf-recorder on Wayland): animated GIF (default), video, or keyframes.
-bugcap record --id <id> --format animated --max-seconds 10   # Enter or Ctrl+C stops early
-
-# Report many bugs in a row from a small always-on-top window (needs tkinter and a desktop session).
-bugcap live
-
-# Browse, filter and triage in a local web page (127.0.0.1 only; --host exposes it on purpose).
-bugcap dashboard --port 8765 --open
-
-# List reports (current repo only inside an initialized repo; everything with --all) and show one.
+bugcap capture --title "Login fails" --note "Error toast after submit" --tag auth
 bugcap list
-bugcap list --all
-bugcap show <id>
-
-# Triage after capture, without re-shooting.
-bugcap edit <id> --status resolved --note "fixed in #42"
-bugcap tag <id> add ui
-bugcap tag <id> remove ui
-
-# GitHub: pull issues in as reports (idempotent), optionally asking to add a screenshot per issue.
-bugcap github pull --repo owner/repo --label bug --limit 20 --ask
-bugcap attach <id> --image ./shot.png      # add an image to any report
-
-# Change the values set at init later, without --force (validated; offers to move existing reports).
-bugcap config repo show
-bugcap config repo set images_repo owner/assets
-bugcap config repo set github owner/new-name --migrate    # or --no-migrate; required when not interactive
-bugcap attach <id> --image ./after.png --note "after the fix"   # note is appended, tied to the image
-
-# GitHub: push a report — create/comment an issue AND commit a plain image copy agents can read.
-bugcap sync <id> --to github --images-repo owner/assets --yes
-
-# Run the MCP server (needs the 'mcp' extra) so coding agents can read/request reports.
-bugcap mcp-serve
+bugcap dashboard --open                 # browse and triage in the browser
 ```
 
-**`@` references.** In notes, `@1` (image index) or `@login-error` (label) points at that report's
-image or recording. They are checked when notes are saved (`capture --note`, `edit --note`, MCP
-`update_notes`, the dashboard): an unknown one is refused and the valid ones are listed. `@@`
-writes a literal `@`; code spans, fenced blocks and email addresses are never references. `show`
-resolves them, and `sync` replaces them with image/links in the GitHub issue. Relabelling or
-removing a referenced image needs `--force`, which rewrites the notes in the same transaction.
+The [usage guide](https://amenalahassa.github.io/bugcap/usage.html) covers every command: images
+and labels, recording, live mode, `@` references, GitHub pull and sync, and the MCP tools.
 
-Media over `[sync] max_upload_mb` (default 25) is skipped on `sync` with a warning.
+## Connect your agent (MCP)
 
-Statuses accepted by `edit --status`: `open`, `in-progress`, `resolved`, `closed`, `wontfix`
-(free-text values from older databases are tolerated on read).
-
-**Repo values.** `bugcap init`, `bugcap sync` and `bugcap config repo set` check that `--github`,
-`--images-repo` (`owner/repo`), `--images-path` and `--images-branch` are well formed and, with `gh`,
-that the repo exists, is writable and has the branch; offline or logged out they only warn. If
-`init --force` or `config repo set/unset` changes the repo identity (GitHub slug or tag) and reports
-are stored under the old one, you are asked whether to move them (the shown counts and old/new values
-come first); non-interactive runs must pass `--migrate` or `--no-migrate`.
-
-**`attach --note`.** The text is appended to the existing notes as `[2026-10-04 10:15] @3: text`, so
-it is timestamped and references the image added with it. On a terminal, `attach` asks for an
-optional note after the capture; the MCP `request_screenshot` tool takes an optional `note`, and so
-does the `--ask` flow of `github pull`.
-
-### Where data lives (per-OS)
-
-| Platform | Data (`bugcap.db`, `images/`) | Config (`config.toml`) |
-|---|---|---|
-| Linux | `$XDG_DATA_HOME/bugcap` (default `~/.local/share/bugcap`) | `$XDG_CONFIG_HOME/bugcap` (default `~/.config/bugcap`) |
-| macOS | `~/Library/Application Support/bugcap` | same as data |
-| Windows | `%LOCALAPPDATA%\bugcap` | `%APPDATA%\bugcap` |
-
-Set `BUGCAP_HOME` to override both (`$BUGCAP_HOME/data` and `$BUGCAP_HOME/config`). The historic
-Linux location is unchanged, so existing databases keep working; they are migrated in place
-(a `repo` and `body` column are added) with no data loss.
-
-### Using it from Claude Code (MCP)
-
-`bugcap mcp-serve` logs startup, each client's initialize, every tool call (arguments' names,
-outcome, duration) and errors with tracebacks, to `logs/mcp-server.log` in the data directory
-(rotated, 1 MB x 3) and to stderr; stdout is reserved for the protocol. Choose the level with
-`--log-level debug|info|warning|error`, `BUGCAP_LOG_LEVEL` or `[log] level` in `config.toml`, and the
-file with `--log-file`, `BUGCAP_LOG_FILE` or `[log] file`. Argument values (such as notes) are only
-logged at `debug`.
-
-
-Requires the extra (`pipx install 'bugcap[mcp]'` or `uv tool install 'bugcap[mcp]'`):
+Requires the `mcp` extra. Then give your agent access to the reports:
 
 ```bash
 claude mcp add bugcap -- bugcap mcp-serve
 ```
 
-or in `.mcp.json`:
+Or in a project's `.mcp.json`:
 
 ```json
 { "mcpServers": { "bugcap": { "command": "bugcap", "args": ["mcp-serve"] } } }
 ```
 
-The server exposes six tools: `list_reports`, `get_report` (returns the image bytes as image
-content, plus media metadata and resolved `@` references), `request_screenshot` (asks you to
-capture for a report or issue; returns immediately when there is no desktop UI), `pull_issues`,
-`attach_image` (paths, globs or URLs, with optional labels) and `update_notes` (validated `@`
-references; errors come back as JSON with a `code`).
+The server exposes six tools: `list_reports`, `get_report` (returns the screenshot), `request_screenshot`,
+`pull_issues`, `attach_image` and `update_notes`. Logs go to `logs/mcp-server.log` in the data
+directory, never to stdout.
+
+Ask your agent something like *"list the open bugcap reports for this repo and fix the one with
+the error toast"*. It can read the picture because it's a local file, not a CDN link.
+
+## How it works
+
+```
+ capture ──► local store (SQLite + images/) ──► MCP / dashboard / CLI   (read by agents and you)
+                       │
+                       └──► sync ──► GitHub issue  +  committed image copy  (readable with gh api)
+```
+
+- **`capture` / `attach` / `record`** write to the store.
+- **`mcp-serve`, `dashboard`, `list`, `show`** read from it.
+- **`sync`** is the only thing that talks to a tracker, and only when you run it.
+
+## Status
+
+Working. Roadmap items 1–5, 7 and 8 are implemented and tested, along with spec 002 (images,
+`@` references, recording, live mode and the dashboard). S3/R2 object storage (item 6) and other
+trackers (item 9) are deferred. The `Destination` seam is in place, so they can be added without
+changing the CLI. See [ROADMAP.md](ROADMAP.md).
+
+## Installation
+
+Requires Python 3.10 or newer. The core CLI uses only the standard library (plus `tomli` before
+Python 3.11). The MCP server is an optional extra.
+
+```bash
+pipx install 'bugcap[mcp] @ git+https://github.com/amenalahassa/bugcap'   # recommended
+uv tool install 'bugcap[mcp] @ git+https://github.com/amenalahassa/bugcap'
+pip install -e '.[dev,mcp]'                                             # development
+```
+
+Supported capture backends: [`flameshot`](https://flameshot.org/) (cross-platform, recommended),
+[`satty`](https://github.com/Satty-org/Satty) with `grim` (Linux/Wayland), and `screencapture`
+(macOS). Run `bugcap setup` to see what's detected. You can always import an existing image with
+`bugcap capture --image PATH`.
+
+## Documentation
+
+Full guide: **[amenalahassa.github.io/bugcap/usage.html](https://amenalahassa.github.io/bugcap/usage.html)**
+covers capture, images, recording, live mode, triage, `@` references, the dashboard, GitHub
+pull and sync, MCP, and where data lives per OS.
+
+Notes on the more involved behaviour:
+
+- **`@` references.** `@1` or `@login-error` in a note points at an image. They are validated on save, and relabelling or removing a referenced image needs `--force`.
+- **Repo values** (`init`, `sync`, `config repo set`) are checked for format and, with `gh`, for existence. Changing the repo identity offers to move existing reports.
+- **Media sync** over `[sync] max_upload_mb` (default 25) is skipped with a warning.
+
+## Development
+
+See [DEVELOPMENT.md](DEVELOPMENT.md). Run the tests with:
+
+```bash
+uv run --extra dev --extra mcp pytest -q
+```
 
 ## Architecture
 

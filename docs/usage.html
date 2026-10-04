@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Usage — bugcap</title>
+  <meta name="description" content="How to install and use bugcap: capture, attach, record, triage, sync to GitHub and connect your AI agent over MCP.">
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="site">
+  <div class="wrap">
+    <a class="brand" href="./">bug<span>cap</span></a>
+    <nav>
+      <a href="./">Home</a>
+      <a href="usage.html" aria-current="page">Usage</a>
+      <a href="https://github.com/amenalahassa/bugcap">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap doc">
+  <aside>
+    <a href="#install">Install</a>
+    <a href="#setup">Capture tool</a>
+    <a href="#repo">Scope to a repo</a>
+    <a href="#capture">Capture</a>
+    <a href="#images">Images</a>
+    <a href="#record">Record a screen</a>
+    <a href="#live">Live mode</a>
+    <a href="#browse">List and triage</a>
+    <a href="#refs">@ references</a>
+    <a href="#dashboard">Dashboard</a>
+    <a href="#github">GitHub</a>
+    <a href="#mcp">Agents (MCP)</a>
+    <a href="#data">Where data lives</a>
+  </aside>
+
+  <main>
+    <h1>Usage</h1>
+    <p class="lead">Everything bugcap does, from the first capture to handing a report to your agent.</p>
+
+    <h2 id="install">Install</h2>
+    <p>Requires Python 3.10 or newer. Install it as a tool so the <code>bugcap</code> command is on your PATH:</p>
+<pre><code># with the MCP server
+pipx install 'bugcap[mcp] @ git+https://github.com/amenalahassa/bugcap'
+# or with uv
+uv tool install 'bugcap[mcp] @ git+https://github.com/amenalahassa/bugcap'</code></pre>
+    <p>Leave out <code>[mcp]</code> for the core CLI only. The extra is needed just for <code>bugcap mcp-serve</code>. To update, run <code>pipx upgrade bugcap</code> or <code>uv tool upgrade bugcap</code>.</p>
+
+    <h2 id="setup">Set up a capture tool</h2>
+    <p>bugcap calls an existing screenshot and annotation tool instead of reinventing one:</p>
+    <table>
+      <tr><th>Tool</th><th>Platform</th></tr>
+      <tr><td><a href="https://flameshot.org/">flameshot</a></td><td>Linux, Windows, macOS (recommended)</td></tr>
+      <tr><td><a href="https://github.com/Satty-org/Satty">satty</a> + <code>grim</code></td><td>Linux (Wayland)</td></tr>
+      <tr><td><code>screencapture</code></td><td>macOS (built in)</td></tr>
+    </table>
+<pre><code>bugcap setup              # reports the detected tool, or recommends one
+bugcap setup --yes        # also installs it through your package manager</code></pre>
+    <p>No capture tool? You can always import an existing image with <code>bugcap capture --image PATH</code>.</p>
+
+    <h2 id="repo">Scope captures to a project</h2>
+    <p>Run this once inside a project repo. Reports captured there are tagged to the repo and listed only there.</p>
+<pre><code>bugcap init                                  # tag defaults to the folder name, GitHub slug to the origin remote
+bugcap init --tag myproj --github owner/repo
+bugcap init --images-repo owner/assets      # where synced image copies are committed</code></pre>
+    <p>This writes <code>.bugcap.toml</code> in the repo. Change the values later with <code>bugcap config repo show</code> and <code>bugcap config repo set</code>. If the change alters the repo identity and reports already exist, bugcap asks whether to move them. In scripts, pass <code>--migrate</code> or <code>--no-migrate</code>.</p>
+
+    <h2 id="capture">Capture a bug</h2>
+    <p>Capture launches your screenshot tool. Annotate, save, and bugcap asks for the description.</p>
+<pre><code>bugcap capture --title "Dashboard empty after module creation" \
+               --note "Created Activity Tracking module, dashboard shows no widgets" \
+               --tag ui</code></pre>
+    <ul>
+      <li><code>--title</code> is a short summary.</li>
+      <li><code>--note</code> is free text. Repeat <code>--tag</code> to add several tags.</li>
+    </ul>
+
+    <h2 id="images">Add more images</h2>
+    <p>Import existing files, globs or URLs. Each is checked by its content (PNG, JPEG, GIF or WebP) and copied into the store.</p>
+<pre><code>bugcap capture --image ./a.png --label login-error --title "Login fails" --note "See @1 and @login-error"
+bugcap attach &lt;id&gt; --image './shots/*.png' --image https://ci.example.com/run/42.png --label after-fix
+bugcap attach &lt;id&gt; --image ./after.png --note "after the fix"   # the note is timestamped and tied to the image</code></pre>
+    <p>Manage a report's images:</p>
+<pre><code>bugcap images &lt;id&gt;                              # index, label, kind, size
+bugcap images &lt;id&gt; relabel login-error sign-in  # refused while notes reference it, unless --force
+bugcap images &lt;id&gt; remove 2 --force             # rewrites @ references in the notes</code></pre>
+
+    <h2 id="record">Record the screen</h2>
+    <p>Needs <code>ffmpeg</code>, or <code>wf-recorder</code> on Wayland. The default output is an animated GIF.</p>
+<pre><code>bugcap record --id &lt;id&gt; --format animated --max-seconds 10   # Enter or Ctrl+C stops early</code></pre>
+    <p>Formats: <code>animated</code> (GIF), <code>video</code>, or <code>frames</code> (keyframes). Use <code>--max-seconds</code>, <code>--max-mb</code> and <code>--fps</code> to limit size. Without <code>--id</code>, the recording creates a new report.</p>
+
+    <h2 id="live">Live mode: report many bugs in a row</h2>
+    <p>A small always-on-top window stays open while you test. Each capture becomes a draft you can finish later. Needs tkinter and a desktop session.</p>
+<pre><code>bugcap live
+bugcap live --repo-dir ~/code/myproj        # scope reports to that repo's .bugcap.toml</code></pre>
+
+    <h2 id="browse">List and triage</h2>
+<pre><code>bugcap list                         # reports in the current repo
+bugcap list --all                   # reports from every repo
+bugcap show &lt;id&gt;                    # one report, with its images and resolved notes
+
+bugcap edit &lt;id&gt; --status resolved --note "fixed in #42"
+bugcap tag &lt;id&gt; add ui
+bugcap tag &lt;id&gt; remove ui</code></pre>
+    <p>Accepted statuses:</p>
+    <p class="statuses"><span>open</span><span>in-progress</span><span>resolved</span><span>closed</span><span>wontfix</span></p>
+
+    <h2 id="refs">@ references in notes</h2>
+    <p>Point at a report's image or recording from its notes:</p>
+    <table>
+      <tr><th>Write</th><th>Meaning</th></tr>
+      <tr><td><code>@1</code></td><td>image or recording number 1</td></tr>
+      <tr><td><code>@login-error</code></td><td>the image with that label</td></tr>
+      <tr><td><code>@@</code></td><td>a literal <code>@</code></td></tr>
+    </table>
+    <p>References are checked when a note is saved. An unknown one is refused and the valid ones are listed. Code spans, fenced blocks and email addresses are never treated as references. <code>show</code> resolves them, and <code>sync</code> turns them into links or images in the GitHub issue.</p>
+
+    <h2 id="dashboard">Dashboard</h2>
+    <p>A local web page to browse, filter and triage reports:</p>
+<pre><code>bugcap dashboard --open                 # http://127.0.0.1:8765 by default
+bugcap dashboard --port 0               # pick a free port</code></pre>
+    <div class="callout"><strong>Security:</strong> the dashboard listens on 127.0.0.1 only. <code>--host 0.0.0.0</code> exposes all your bug reports to your network. Only do that on purpose.</div>
+
+    <h2 id="github">GitHub</h2>
+    <p>bugcap uses your <code>gh</code> login. Run <code>gh auth login</code> once if you haven't.</p>
+    <h3>Import issues as reports</h3>
+<pre><code>bugcap github pull --repo owner/repo --label bug --limit 20 --ask</code></pre>
+    <p>Pulling is idempotent: running it again skips issues already imported. <code>--ask</code> prompts you to add a screenshot to each issue.</p>
+    <h3>Push a report to an issue</h3>
+<pre><code>bugcap sync &lt;id&gt; --to github --images-repo owner/assets --yes</code></pre>
+    <p>This creates or updates the issue and commits a plain copy of each image to the images repo, so agents can read it. Media over the size limit is skipped with a warning. The limit is <code>[sync] max_upload_mb</code>, 25 MB by default.</p>
+
+    <h2 id="mcp">Connect your agent (MCP)</h2>
+    <p>The MCP server lets an agent list reports, read them (images included), request a screenshot, pull issues, attach images and update notes.</p>
+<pre><code>claude mcp add bugcap -- bugcap mcp-serve</code></pre>
+    <p>Or add it to a project's <code>.mcp.json</code>:</p>
+<pre><code>{
+  "mcpServers": {
+    "bugcap": { "command": "bugcap", "args": ["mcp-serve"] }
+  }
+}</code></pre>
+    <h3>Tools</h3>
+    <table>
+      <tr><th>Tool</th><th>What it does</th></tr>
+      <tr><td><code>list_reports</code></td><td>List reports, scoped to the current repo.</td></tr>
+      <tr><td><code>get_report</code></td><td>Return a report with its image bytes, media metadata and resolved <code>@</code> references.</td></tr>
+      <tr><td><code>request_screenshot</code></td><td>Ask you to capture for a report or issue. Returns at once when there's no desktop.</td></tr>
+      <tr><td><code>pull_issues</code></td><td>Import GitHub issues as reports.</td></tr>
+      <tr><td><code>attach_image</code></td><td>Attach paths, globs or URLs, with optional labels.</td></tr>
+      <tr><td><code>update_notes</code></td><td>Update notes. Invalid <code>@</code> references come back as JSON with a <code>code</code>.</td></tr>
+    </table>
+    <h3>Logs</h3>
+    <p>The server logs to <code>logs/mcp-server.log</code> in the data directory (rotated, 1 MB × 3) and to stderr. Stdout is reserved for the protocol. Set the level with <code>--log-level</code>, <code>BUGCAP_LOG_LEVEL</code> or <code>[log] level</code> in <code>config.toml</code>. Note text is only logged at <code>debug</code>.</p>
+
+    <h2 id="data">Where data lives</h2>
+    <p>Reports and images are plain files, independent of any tracker.</p>
+    <table>
+      <tr><th>Platform</th><th>Data (<code>bugcap.db</code>, <code>images/</code>)</th><th>Config (<code>config.toml</code>)</th></tr>
+      <tr><td>Linux</td><td><code>~/.local/share/bugcap</code></td><td><code>~/.config/bugcap</code></td></tr>
+      <tr><td>macOS</td><td><code>~/Library/Application Support/bugcap</code></td><td>same as data</td></tr>
+      <tr><td>Windows</td><td><code>%LOCALAPPDATA%\bugcap</code></td><td><code>%APPDATA%\bugcap</code></td></tr>
+    </table>
+    <p>Set <code>BUGCAP_HOME</code> to move both. Reinstalling bugcap never touches your data. Schema changes are migrated in place.</p>
+  </main>
+</div>
+
+<footer class="site">
+  <div class="wrap">
+    <span>bugcap · MIT licensed</span>
+    <span><a href="./">Home</a> · <a href="https://github.com/amenalahassa/bugcap">GitHub</a> · <a href="https://github.com/amenalahassa/bugcap/blob/master/CHANGELOG.md">Changelog</a></span>
+  </div>
+</footer>
+
+</body>
+</html>

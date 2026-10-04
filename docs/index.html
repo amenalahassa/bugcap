@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>bugcap — bug capture your AI agent can read</title>
+  <meta name="description" content="Local-first bug capture: annotated screenshots and notes, stored on your machine, readable by AI coding agents over MCP, synced to GitHub issues when you choose.">
+  <meta property="og:title" content="bugcap">
+  <meta property="og:description" content="Annotated bug screenshots that AI coding agents can actually read.">
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="site">
+  <div class="wrap">
+    <a class="brand" href="./">bug<span>cap</span></a>
+    <nav>
+      <a href="./" aria-current="page">Home</a>
+      <a href="usage.html">Usage</a>
+      <a href="https://github.com/amenalahassa/bugcap">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="hero wrap">
+    <h1>Bug reports your <span>AI agent</span> can read.</h1>
+    <p class="lead">Snap an annotated screenshot of what's broken and jot down what you saw. bugcap keeps it on your machine, lets any coding agent read the picture, and syncs to GitHub issues when you're ready.</p>
+    <div class="cta">
+      <a class="btn primary" href="usage.html">Read the usage guide</a>
+      <a class="btn" href="https://github.com/amenalahassa/bugcap">View on GitHub</a>
+    </div>
+    <div class="demo">
+      <!-- Replace with the recorded demo (docs/assets/demo.gif) when it is ready. -->
+      <img src="assets/demo.gif" alt="bugcap capturing and annotating a bug, then listing the report" onerror="this.parentElement.style.display='none'">
+    </div>
+  </div>
+
+  <section>
+    <div class="wrap">
+      <h2>Why it exists</h2>
+      <p class="sub">A screenshot and a mental note of what went wrong is two disconnected things. By the time you file the issue, the context is gone, and the picture is the part an agent most needs to see.</p>
+      <div class="grid">
+        <div class="card">
+          <div class="icon">📸</div>
+          <h3>Capture at the moment</h3>
+          <p>Annotated screenshots through flameshot, satty or the macOS tool. Or import existing images, globs and URLs.</p>
+        </div>
+        <div class="card">
+          <div class="icon">🗂️</div>
+          <h3>A local record</h3>
+          <p>A SQLite index and PNGs on disk. Nothing depends on GitHub or any service being reachable.</p>
+        </div>
+        <div class="card">
+          <div class="icon">🤖</div>
+          <h3>Readable by agents</h3>
+          <p>A stdio MCP server exposes reports, including the image bytes, to Claude Code and other agents.</p>
+        </div>
+        <div class="card">
+          <div class="icon">🔁</div>
+          <h3>Sync on your schedule</h3>
+          <p>Push a report to GitHub: an issue with the usual inline image, plus a plain copy agents can read.</p>
+        </div>
+        <div class="card">
+          <div class="icon">🎞️</div>
+          <h3>Record what happens</h3>
+          <p>Capture a short screen recording as an animated GIF, a video or keyframes, with size and duration caps.</p>
+        </div>
+        <div class="card">
+          <div class="icon">🖥️</div>
+          <h3>Triage in a browser</h3>
+          <p>A local dashboard, bound to 127.0.0.1 by default, to browse, filter, and change statuses.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>Quick start</h2>
+      <p class="sub">Three commands from install to your first report.</p>
+      <ol class="steps">
+        <li>
+          <h3>Install</h3>
+          <pre><code>pipx install 'bugcap[mcp] @ git+https://github.com/amenalahassa/bugcap'</code></pre>
+        </li>
+        <li>
+          <h3>Check your capture tool</h3>
+          <pre><code>bugcap setup --yes             # detects or installs flameshot / satty / screencapture</code></pre>
+        </li>
+        <li>
+          <h3>Capture a bug</h3>
+          <pre><code>bugcap capture --title "Login fails" --note "Error toast after submit" --tag auth</code></pre>
+        </li>
+      </ol>
+      <p><a href="usage.html">Full usage guide →</a></p>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>Works with your agent</h2>
+      <p class="sub">Add bugcap as an MCP server, then ask your agent to look at a report.</p>
+<pre><code>claude mcp add bugcap -- bugcap mcp-serve</code></pre>
+      <p>The server exposes six tools: <code>list_reports</code>, <code>get_report</code> (with the screenshot), <code>request_screenshot</code>, <code>pull_issues</code>, <code>attach_image</code> and <code>update_notes</code>.</p>
+      <p><a href="usage.html#mcp">Agent setup and tools →</a></p>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>Why the local copy matters</h2>
+      <p class="sub">GitHub's attachment CDN only resolves in a real browser session. No token can fetch it, so an agent using <code>gh</code> sees the issue text but never the picture.</p>
+      <div class="callout">
+        <strong>bugcap's answer:</strong> on sync it writes the issue with the usual inline image for humans, and also commits a plain copy of the file to a repo you choose. Agents read that copy with <code>gh api repos/&lt;owner&gt;/&lt;repo&gt;/contents/&lt;path&gt;</code>.
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>bugcap · MIT licensed · by Konrad Tagnon Amen ALAHASSA</span>
+    <span><a href="https://github.com/amenalahassa/bugcap">GitHub</a> · <a href="usage.html">Usage</a> · <a href="https://github.com/amenalahassa/bugcap/blob/master/CHANGELOG.md">Changelog</a></span>
+  </div>
+</footer>
+
+</body>
+</html>
