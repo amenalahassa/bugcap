@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bugcap"
+version = "0.1.0"
+description = "Local-first, agent-readable bug capture: annotated screenshots + notes, stored locally, synced to trackers on your own schedule."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Konrad Tagnon Amen ALAHASSA" }]
+
+[project.scripts]
+bugcap = "bugcap.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
