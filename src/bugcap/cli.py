@@ -7,7 +7,7 @@ import threading
 from pathlib import Path
 from typing import Optional
 
-from . import backends, capture, config, recorder, refs, repo, service, sync
+from . import backends, capture, config, ghcli, recorder, refs, repo, service, sync, validation
 from .capture import CaptureError
 from .errors import ServiceError
 from .ghcli import GhError
@@ -229,10 +229,98 @@ def cmd_setup(args: argparse.Namespace) -> int:
     return rc
 
 
+# --- repo values: validation and re-homing reports -----------------------------
+
+def check_repo_values(github=None, images_repo=None, images_path=None, images_branch=None) -> bool:
+    """Validate the format of the given values, then verify them with `gh`. Prints the problem
+    and returns False for a definite error; offline/unauthenticated only warns."""
+    try:
+        validation.validate_repo_values(github, images_repo, images_path, images_branch)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return False
+    checks = []
+    if github:
+        checks.append((github, None, False))
+    if images_repo:
+        checks.append((images_repo, images_branch, True))
+    for slug, branch, need_write in checks:
+        try:
+            ghcli.verify_repo(slug, branch=branch, need_write=need_write)
+        except ghcli.GhUnavailable as exc:
+            print(f"warning: could not verify {slug} with gh ({exc}); continuing", file=sys.stderr)
+        except GhError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return False
+    return True
+
+
+def _identity(cfg) -> str:
+    return f"{cfg.key} (tag {cfg.tag})"
+
+
+def plan_repo_move(store: Store, old, new) -> tuple[bool, int]:
+    """(identity changed, number of reports that would be affected)."""
+    if old.key == new.key and old.tag == new.tag:
+        return False, 0
+    reports = store.list(repo=old.key)
+    if old.key == new.key:
+        reports = [r for r in reports if old.tag in r.tags]
+    return True, len(reports)
+
+
+def decide_migration(args, old, new, count: int) -> Optional[bool]:
+    """True = move the reports, False = leave them, None = stop (non-interactive without a flag)."""
+    if count == 0:
+        return False
+    explicit = getattr(args, "migrate", None)
+    if explicit is not None:
+        return explicit
+    summary = f"{count} existing report(s) are stored under {_identity(old)}; the new value is {_identity(new)}."
+    if sys.stdin is not None and sys.stdin.isatty():
+        answer = input(f"{summary}\nMove them (and their images/data) to the new repo? [y/N] ").strip().lower()
+        return answer == "y"
+    print(
+        f"error: {summary}\nRe-run with --migrate to move them, or --no-migrate to leave them "
+        "(they would then not show in `bugcap list` for this repo).",
+        file=sys.stderr,
+    )
+    return None
+
+
+def apply_migration(store: Store, old, new, move: bool, count: int) -> None:
+    if move:
+        moved = store.move_repo(old.key, new.key, old.tag, new.tag)
+        print(f"Moved {moved} report(s) from {_identity(old)} to {_identity(new)}.")
+    elif count:
+        print(
+            f"Left {count} report(s) under {_identity(old)}; they will not show in `bugcap list` "
+            "for this repo (use `bugcap list --all`).",
+            file=sys.stderr,
+        )
+
+
 # --- init (T018) --------------------------------------------------------------
 
 def cmd_init(args: argparse.Namespace) -> int:
     root = repo.git_root() or Path.cwd()
+    if not check_repo_values(args.github, args.images_repo, None, None):
+        return 1
+    target = root / repo.CONFIG_NAME
+    old = None
+    new = None
+    move = False
+    count = 0
+    if target.exists() and args.force:
+        old = repo._config_from_file(target)
+        new = repo.build_config(root, tag=args.tag, github=args.github, images_repo=args.images_repo)
+        with Store() as store:
+            changed, count = plan_repo_move(store, old, new)
+        if changed:
+            decision = decide_migration(args, old, new, count)
+            if decision is None:
+                return 1
+            move = decision
     try:
         cfg = repo.init_repo(
             root,
@@ -251,7 +339,84 @@ def cmd_init(args: argparse.Namespace) -> int:
         print(f"  github: {cfg.github}")
     if cfg.images_repo:
         print(f"  images_repo: {cfg.images_repo}")
+    if old is not None and new is not None and (old.key != cfg.key or old.tag != cfg.tag):
+        with Store() as store:
+            apply_migration(store, old, cfg, move, count)
     return 0
+
+
+# --- config repo (show / set / unset) -----------------------------------------
+
+def _repo_config_or_error():
+    path = repo.find_config()
+    if path is None:
+        print(f"error: no {repo.CONFIG_NAME} here; run `bugcap init` first.", file=sys.stderr)
+        return None
+    return repo._config_from_file(path)
+
+
+def cmd_config_repo_show(args: argparse.Namespace) -> int:
+    cfg = _repo_config_or_error()
+    if cfg is None:
+        return 1
+    print(f"{repo.CONFIG_NAME}: {cfg.root / repo.CONFIG_NAME}")
+    for key in repo.SETTABLE_KEYS:
+        print(f"  {key + ':':14s} {getattr(cfg, key) or '(not set)'}")
+    print(f"  {'repo key:':14s} {cfg.key}")
+    return 0
+
+
+def _change_repo_config(args: argparse.Namespace, key: str, value: Optional[str]) -> int:
+    import dataclasses
+
+    old = _repo_config_or_error()
+    if old is None:
+        return 1
+    if key not in repo.SETTABLE_KEYS:
+        print(f"error: unknown key {key!r}; choose one of: {', '.join(repo.SETTABLE_KEYS)}", file=sys.stderr)
+        return 2
+    if value is None and key == "tag":
+        print("error: the tag cannot be unset; set it to a new value instead.", file=sys.stderr)
+        return 2
+    if value is not None:
+        if key == "tag":
+            if not value.strip():
+                print("error: the tag must not be empty.", file=sys.stderr)
+                return 2
+        else:
+            if key == "images_path":
+                value = value.strip("/")
+            values = {"github": None, "images_repo": None, "images_path": None, "images_branch": None}
+            values[key] = value
+            # a branch is only meaningful with its repo, and a new repo is checked with its branch
+            if key == "images_branch":
+                values["images_repo"] = old.images_repo
+            if key == "images_repo":
+                values["images_branch"] = old.images_branch
+            if not check_repo_values(**values):
+                return 1
+    new = dataclasses.replace(old, **{key: value})
+    move, count = False, 0
+    with Store() as store:
+        changed, count = plan_repo_move(store, old, new)
+        if changed:
+            decision = decide_migration(args, old, new, count)
+            if decision is None:
+                return 1
+            move = decision
+        repo.write_config(new)
+        print(f"{key}: {getattr(old, key) or '(not set)'} -> {value or '(not set)'}")
+        if changed:
+            apply_migration(store, old, new, move, count)
+    return 0
+
+
+def cmd_config_repo_set(args: argparse.Namespace) -> int:
+    return _change_repo_config(args, args.key, args.value)
+
+
+def cmd_config_repo_unset(args: argparse.Namespace) -> int:
+    return _change_repo_config(args, args.key, None)
 
 
 # --- triage: edit / tag (T023) ------------------------------------------------
@@ -315,37 +480,66 @@ def cmd_tag(args: argparse.Namespace) -> int:
 
 # --- attach (T029) ------------------------------------------------------------
 
+def _note_for_images(args: argparse.Namespace) -> Optional[str]:
+    """`--note`, or an optional prompt on an interactive terminal (as `capture` does)."""
+    if args.note is not None:
+        return args.note
+    if sys.stdin is not None and sys.stdin.isatty():
+        return input("Note about this image (optional): ").strip()
+    return None
+
+
 def cmd_attach(args: argparse.Namespace) -> int:
     with Store() as store:
         report = resolve_report(store, args.id)
         if report is None:
             return 1
         labels = list(args.label or [])
+        added: list = []
+        rejected: list = []
+        shot_path = None
         if args.image:
             try:
                 result = service.add_media(store, args.id, list(args.image), labels)
             except ServiceError as exc:
                 print_service_error(exc)
                 return 1
-            print_ingest(result.added, result.rejected)
+            added, rejected = result.added, result.rejected
+            print_ingest(added, rejected)
+        else:
             try:
-                refs.validate_references(store.get(args.id).notes, store.get(args.id).media)
+                shot_path = capture.capture_screenshot()
+            except CaptureError as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                return 1
+            try:
+                added = [service.attach_captured(store, args.id, str(shot_path), labels[0] if labels else None)]
+            except ServiceError as exc:
+                print_service_error(exc)
+                return 1
+
+        note = _note_for_images(args) if added else args.note
+        if note and not added:
+            print("error: no image was added, so the note was not saved.", file=sys.stderr)
+        elif note:
+            try:
+                service.append_note(store, args.id, note, added)
+            except ServiceError as exc:
+                print_service_error(exc)
+                print("warning: the image was attached but the note was not saved.", file=sys.stderr)
+                return 1
+        current = store.get(args.id)
+        if args.image:
+            try:
+                refs.validate_references(current.notes, current.media)
             except ServiceError as exc:
                 print(f"warning: {exc.message}", file=sys.stderr)
-            return 1 if result.rejected else 0
-        try:
-            path = capture.capture_screenshot()
-        except CaptureError as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 1
-        try:
-            service.attach_captured(store, args.id, str(path), labels[0] if labels else None)
-        except ServiceError as exc:
-            print_service_error(exc)
-            return 1
 
-    print(f"Attached {path} to report #{args.id}")
-    return 0
+    if shot_path is not None:
+        print(f"Attached {shot_path} to report #{args.id}")
+    elif note and added:
+        print(f"Added note to report #{args.id}")
+    return 1 if rejected or (note and not added) else 0
 
 
 # --- images (list / relabel / remove) -----------------------------------------
@@ -481,11 +675,14 @@ def _ask_screenshot_cb():
             return None
         try:
             if answer.lower() == "y":
-                return str(capture.capture_screenshot())
-            return str(capture.import_image(Path(answer)))
+                path = str(capture.capture_screenshot())
+            else:
+                path = str(capture.import_image(Path(answer)))
         except CaptureError as exc:
             print(f"  skipped: {exc}", file=sys.stderr)
             return None
+        note = input("Note about this image (optional): ").strip()
+        return (path, note) if note else path
     return cb
 
 
@@ -556,6 +753,10 @@ def cmd_sync(args: argparse.Namespace) -> int:
             args.images_repo, args.images_path, args.images_branch,
             cfg, config.get_sync_defaults(), issue_slug,
         )
+        if not check_repo_values(
+            github=args.repo, images_repo=images.repo, images_path=images.path, images_branch=images.branch,
+        ):
+            return 1
         opts = sync.SyncOptions(
             issue_slug=issue_slug,
             images=images,
@@ -584,7 +785,7 @@ def cmd_sync(args: argparse.Namespace) -> int:
 def cmd_mcp_serve(args: argparse.Namespace) -> int:
     from . import mcp_server
     try:
-        mcp_server.run()
+        mcp_server.run(log_level=args.log_level, log_file=args.log_file)
     except mcp_server.MCPUnavailable as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -592,6 +793,14 @@ def cmd_mcp_serve(args: argparse.Namespace) -> int:
 
 
 # --- parser -------------------------------------------------------------------
+
+def _migrate_flags(p: argparse.ArgumentParser) -> None:
+    group = p.add_mutually_exclusive_group()
+    group.add_argument("--migrate", dest="migrate", action="store_true", default=None,
+                       help="When the repo identity changes, move existing reports to the new one.")
+    group.add_argument("--no-migrate", dest="migrate", action="store_false",
+                       help="When the repo identity changes, leave existing reports where they are.")
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -609,6 +818,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--github", help="GitHub owner/repo (defaults to the origin remote).")
     p.add_argument("--images-repo", dest="images_repo", help="Repo for committed image copies ([sync]).")
     p.add_argument("--force", action="store_true", help="Overwrite an existing .bugcap.toml.")
+    _migrate_flags(p)
     p.set_defaults(func=cmd_init)
 
     p = sub.add_parser("capture", help="Capture (or import) a screenshot and save a report.")
@@ -646,6 +856,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--image", action="append", metavar="SRC",
                    help="Import an image (path, glob or http(s) URL) instead of launching a capture tool; repeatable.")
     p.add_argument("--label", action="append", help="Label for the --image at the same position (repeatable).")
+    p.add_argument("--note", help="Text appended to the report's notes, tied to the image(s) added here.")
     p.set_defaults(func=cmd_attach)
 
     p = sub.add_parser("images", help="List a report's images, or relabel/remove one.")
@@ -654,6 +865,22 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("args", nargs="*", help="relabel: <idx|label> <new-label>; remove: <idx|label>")
     p.add_argument("--force", action="store_true", help="Rewrite @ references in the notes instead of refusing.")
     p.set_defaults(func=cmd_images)
+
+    cfg_p = sub.add_parser("config", help="Inspect or change settings.")
+    cfg_sub = cfg_p.add_subparsers(dest="config_target", required=True)
+    repo_p = cfg_sub.add_parser("repo", help="This repo's .bugcap.toml values (tag, github, [sync]).")
+    repo_sub = repo_p.add_subparsers(dest="repo_action", required=True)
+    p = repo_sub.add_parser("show", help="Print the current values.")
+    p.set_defaults(func=cmd_config_repo_show)
+    p = repo_sub.add_parser("set", help="Change one value (validated; offers to move reports on identity changes).")
+    p.add_argument("key", help=f"One of: {', '.join(repo.SETTABLE_KEYS)}")
+    p.add_argument("value")
+    _migrate_flags(p)
+    p.set_defaults(func=cmd_config_repo_set)
+    p = repo_sub.add_parser("unset", help="Remove one value (not the tag).")
+    p.add_argument("key")
+    _migrate_flags(p)
+    p.set_defaults(func=cmd_config_repo_unset)
 
     p = sub.add_parser("record", help="Record the screen (video, keyframes or animated GIF) into a report.")
     p.add_argument("--id", type=int, help="Attach to this report (default: create a new one).")
@@ -697,6 +924,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_sync)
 
     p = sub.add_parser("mcp-serve", help="Run the stdio MCP server (needs the 'mcp' extra).")
+    p.add_argument("--log-level", dest="log_level", choices=["debug", "info", "warning", "error"],
+                   help="Log level (default info; or BUGCAP_LOG_LEVEL, or [log] level in config.toml).")
+    p.add_argument("--log-file", dest="log_file", help="Log file (default: logs/mcp-server.log in the data dir).")
     p.set_defaults(func=cmd_mcp_serve)
 
     return parser

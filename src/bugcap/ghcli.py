@@ -138,3 +138,38 @@ def _first_url(text: Optional[str]) -> Optional[str]:
         if token.startswith("http://") or token.startswith("https://"):
             return token.strip()
     return None
+
+
+class GhUnavailable(RuntimeError):
+    """Cannot verify (no `gh`, not logged in, offline): callers warn and carry on."""
+
+
+def verify_repo(slug: str, branch: Optional[str] = None, need_write: bool = False) -> None:
+    """Check that `slug` exists (and, with `need_write`, that the current login can push) and
+    that `branch` exists. Raises GhError for a definite problem naming the bad value and
+    GhUnavailable when the check itself cannot be done."""
+    try:
+        ensure_ready()
+    except GhError as exc:
+        raise GhUnavailable(str(exc)) from exc
+
+    def fetch(endpoint: str):
+        result = run_gh(["api", endpoint])
+        if result.returncode == 0:
+            try:
+                return json.loads(result.stdout or "{}")
+            except ValueError:
+                return {}
+        text = f"{result.stderr} {result.stdout}"
+        if "404" in text or "Not Found" in text:
+            return None
+        raise GhUnavailable(text.strip() or "gh api failed")
+
+    info = fetch(f"repos/{slug}")
+    if info is None:
+        raise GhError(f"repo {slug!r} does not exist, or your `gh` login cannot see it")
+    permissions = info.get("permissions") if isinstance(info, dict) else None
+    if need_write and isinstance(permissions, dict) and permissions.get("push") is False:
+        raise GhError(f"repo {slug!r} is not writable with the current `gh` login")
+    if branch and fetch(f"repos/{slug}/branches/{branch}") is None:
+        raise GhError(f"branch {branch!r} does not exist in {slug}")

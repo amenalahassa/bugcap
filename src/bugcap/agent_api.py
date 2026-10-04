@@ -176,6 +176,7 @@ def request_screenshot(
     issue: Optional[str] = None,
     message: Optional[str] = None,
     timeout_seconds: int = 300,
+    note: Optional[str] = None,
 ) -> dict:
     if not capture.has_display():
         return {"status": "non_interactive", "message": "no interactive desktop UI available"}
@@ -191,9 +192,16 @@ def request_screenshot(
         return {"status": "cancelled", "message": str(exc)}
     except TimeoutError as exc:
         return {"status": "cancelled", "message": str(exc)}
-    store.add_image(report.id, str(path))
+    media = service.attach_captured(store, report.id, str(path))
+    note_error = None
+    if note:
+        try:
+            service.append_note(store, report.id, note, [media])
+        except ServiceError as exc:
+            note_error = exc.message
     p = Path(path)
     return {
+        **({"note_error": note_error} if note_error else {}),
         "status": "captured",
         "report_id": report.id,
         "image": {"path": str(path), "mime": _mime(p), "bytes": p.read_bytes()},

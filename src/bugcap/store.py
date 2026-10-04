@@ -375,6 +375,21 @@ class Store:
         self._commit()
         return self.get(report_id)
 
+    def move_repo(self, old_key: str, new_key: str, old_tag: Optional[str], new_tag: Optional[str]) -> int:
+        """Re-home every report stored under `old_key`: set its repo to `new_key` and, when the
+        tag changed, swap `old_tag` for `new_tag` in its tags. Returns the number of reports."""
+        with self.transaction():
+            reports = self.list(repo=old_key)
+            for report in reports:
+                tags = list(report.tags)
+                if old_tag and new_tag and old_tag != new_tag and old_tag in tags:
+                    tags[tags.index(old_tag)] = new_tag
+                self._conn.execute(
+                    "UPDATE reports SET repo = ?, tags = ? WHERE id = ?",
+                    (new_key, json.dumps(normalize_tags(tags)), report.id),
+                )
+        return len(reports)
+
     def find_by_ref(self, key: str, value: str) -> Optional[Report]:
         for report in self.list():
             if report.synced_refs.get(key) == value:

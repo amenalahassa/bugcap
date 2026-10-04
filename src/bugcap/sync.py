@@ -12,7 +12,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Callable, Optional, Protocol
 
-from . import config, ghcli, refs
+from . import config, ghcli, refs, service
 from .store import Media, Report, Store
 
 DEFAULT_IMAGES_PATH = "bugcap-images"
@@ -105,6 +105,17 @@ def _issue_number(url: str) -> int:
 
 # --- pull ---------------------------------------------------------------------
 
+def _attach_answer(store: Store, report_id: int, answer) -> None:
+    """`answer` from the --ask callback: None, a path, or (path, note); the note is appended
+    to the report's notes and tied to the new image."""
+    if not answer:
+        return
+    path, note = answer if isinstance(answer, tuple) else (answer, None)
+    media = service.attach_captured(store, report_id, str(path))
+    if note:
+        service.append_note(store, report_id, note, [media])
+
+
 def pull_issues(
     store: Store,
     slug: str,
@@ -132,9 +143,7 @@ def pull_issues(
             )
             created += 1
             if ask_cb is not None:
-                path = ask_cb(report, issue)
-                if path:
-                    store.add_image(report.id, path)
+                _attach_answer(store, report.id, ask_cb(report, issue))
         else:
             if existing.title != issue["title"] or existing.body != body:
                 store.update(existing.id, title=issue["title"], body=body)
@@ -142,9 +151,7 @@ def pull_issues(
             else:
                 unchanged += 1
             if ask_cb is not None:
-                path = ask_cb(existing, issue)
-                if path:
-                    store.add_image(existing.id, path)
+                _attach_answer(store, existing.id, ask_cb(existing, issue))
     return {"created": created, "updated": updated, "unchanged": unchanged}
 
 

@@ -219,6 +219,27 @@ def add_recording(
     return store.get(report.id), media
 
 
+def format_note_entry(text: str, media: list, when=None) -> str:
+    """`[2026-10-04 10:15] @3: text`: timestamped and tied to the image(s) it was added with."""
+    from datetime import datetime
+
+    stamp = (when or datetime.now().astimezone()).strftime("%Y-%m-%d %H:%M")
+    tokens = " ".join(f"@{m.idx}" for m in media)
+    return f"[{stamp}] {tokens}: {text.strip()}" if tokens else f"[{stamp}] {text.strip()}"
+
+
+def append_note(store: Store, report_id: int, text: str, media: Optional[list] = None, when=None) -> Report:
+    """Append a note to the report's notes (never replacing them), tied to the media it was
+    added with so it can be referenced with `@n`. The new entry is validated like any note."""
+    report = _require(store, report_id)
+    if not (text or "").strip():
+        return report
+    entry = format_note_entry(text, media or [], when)
+    refs.validate_references(entry, report.media)
+    notes = f"{report.notes.rstrip()}\n\n{entry}" if (report.notes or "").strip() else entry
+    return store.update(report_id, notes=notes)
+
+
 def set_status(store: Store, report_id: int, status: str) -> Report:
     _require(store, report_id)
     if status not in STATUSES:

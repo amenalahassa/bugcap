@@ -62,10 +62,7 @@ def find_config(start: Optional[Path] = None) -> Optional[Path]:
     return None
 
 
-def load_repo_config(start: Optional[Path] = None) -> Optional[RepoConfig]:
-    path = find_config(start)
-    if not path:
-        return None
+def _config_from_file(path: Path) -> RepoConfig:
     data = tomlio.load(path)
     sync = data.get("sync") or {}
     return RepoConfig(
@@ -78,28 +75,12 @@ def load_repo_config(start: Optional[Path] = None) -> Optional[RepoConfig]:
     )
 
 
-def init_repo(
-    root: Path,
-    tag: Optional[str] = None,
-    github: Optional[str] = None,
-    images_repo: Optional[str] = None,
-    images_path: Optional[str] = None,
-    images_branch: Optional[str] = None,
-    force: bool = False,
-) -> RepoConfig:
-    target = root / CONFIG_NAME
-    if target.exists() and not force:
-        raise RepoConfigError(
-            f"{CONFIG_NAME} already exists in {root}. Use --force to overwrite."
-        )
-    cfg = RepoConfig(
-        root=root,
-        tag=tag or root.name,
-        github=github or detect_github_slug(root),
-        images_repo=images_repo,
-        images_path=images_path,
-        images_branch=images_branch,
-    )
+def load_repo_config(start: Optional[Path] = None) -> Optional[RepoConfig]:
+    path = find_config(start)
+    return _config_from_file(path) if path else None
+
+
+def write_config(cfg: RepoConfig) -> None:
     data: dict = {"tag": cfg.tag}
     if cfg.github:
         data["github"] = cfg.github
@@ -114,5 +95,44 @@ def init_repo(
     }
     if sync:
         data["sync"] = sync
-    tomlio.save(target, data)
+    tomlio.save(cfg.root / CONFIG_NAME, data)
+
+
+def build_config(
+    root: Path,
+    tag: Optional[str] = None,
+    github: Optional[str] = None,
+    images_repo: Optional[str] = None,
+    images_path: Optional[str] = None,
+    images_branch: Optional[str] = None,
+) -> RepoConfig:
+    """The config `init` would write (nothing is written)."""
+    return RepoConfig(
+        root=root,
+        tag=tag or root.name,
+        github=github or detect_github_slug(root),
+        images_repo=images_repo,
+        images_path=images_path,
+        images_branch=images_branch,
+    )
+
+
+def init_repo(
+    root: Path,
+    tag: Optional[str] = None,
+    github: Optional[str] = None,
+    images_repo: Optional[str] = None,
+    images_path: Optional[str] = None,
+    images_branch: Optional[str] = None,
+    force: bool = False,
+) -> RepoConfig:
+    if (root / CONFIG_NAME).exists() and not force:
+        raise RepoConfigError(
+            f"{CONFIG_NAME} already exists in {root}. Use --force to overwrite."
+        )
+    cfg = build_config(root, tag, github, images_repo, images_path, images_branch)
+    write_config(cfg)
     return cfg
+
+
+SETTABLE_KEYS = ("tag", "github", "images_repo", "images_path", "images_branch")

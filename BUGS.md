@@ -1,5 +1,7 @@
 # Known bugs / issues
 
+All five entries below are fixed (see the commit history); they are kept here with their resolution.
+
 ## `bugcap init --force` silently orphans existing data when the repo changes
 
 When `.bugcap.toml` is overwritten with `--force` and the tag or GitHub slug changes, reports
@@ -11,6 +13,8 @@ existing reports and their images/data should be moved to the new repo, with the
 values and the number of affected reports shown. Non-interactive runs need an explicit flag
 (e.g. `--migrate` / `--no-migrate`) instead of guessing.
 
+**Resolution:** Fixed: `init --force` (and `config repo set/unset`) shows the old/new identity and the number of affected reports, then moves them (and swaps the repo tag) on `--migrate` or an interactive yes; non-interactive runs must pass `--migrate` or `--no-migrate`.
+
 ## `bugcap mcp-serve` does not log anything
 
 The MCP server produces no log output, so failed tool calls, client connection problems and
@@ -19,6 +23,8 @@ crashes are invisible to the user.
 **Expected:** log to a file (and/or stderr, never stdout, which carries the MCP protocol) with a
 configurable level: startup, client initialize, each tool call with its outcome and duration, and
 errors with tracebacks. Default log location in the per-user data dir; document it in the README.
+
+**Resolution:** Fixed: `mcp-serve` logs to `logs/mcp-server.log` in the data dir and to stderr (never stdout), with `--log-level`/`--log-file`; documented in the README.
 
 ## Capturing a new image for an already-reported bug can't carry a note
 
@@ -32,6 +38,8 @@ is a separate `bugcap edit` afterwards, which loses the link between the note an
 note after the capture, as `capture` does. The same applies to the MCP `request_screenshot` tool
 (optional note argument) and to the `--ask` flow of `github pull`.
 
+**Resolution:** Fixed: `attach --note` (and an interactive prompt, MCP `request_screenshot` `note`, and the `github pull --ask` flow) appends a timestamped note that references the image.
+
 ## `--images-repo` value is not validated
 
 `bugcap init --images-repo X` and `bugcap sync --images-repo X` accept any string. Nothing checks
@@ -44,6 +52,8 @@ partial sync).
 exists, with a clear error naming the bad value. Offline or unauthenticated, warn and continue
 rather than refuse.
 
+**Resolution:** Fixed: slug, images path and branch formats are validated in `init`, `sync` and `config repo set`, and checked with `gh` (exists, writable, branch exists); offline only warns.
+
 ## No way to change the values set at `init` without `--force`
 
 The tag, GitHub slug and `[sync]` values (`images_repo`, `images_path`, `images_branch`) can only
@@ -54,3 +64,5 @@ currently orphans existing data, see above).
 `bugcap config repo show` (or `bugcap init --update`), that changes individual keys of the current
 repo's `.bugcap.toml`, validates the new value (see above) and, for tag/slug changes, offers to
 migrate existing reports as described in the `init --force` entry.
+
+**Resolution:** Fixed: `bugcap config repo show|set|unset` changes single keys, validates them and follows the same migration rules.

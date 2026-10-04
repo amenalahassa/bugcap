@@ -227,3 +227,18 @@ def dashboard(bugcap_home):
     yield client
     server.shutdown()
     server.server_close()
+
+
+@pytest.fixture(autouse=True)
+def _no_real_github(monkeypatch):
+    """Tests never reach GitHub: online verification reports "unavailable" unless a test
+    installs its own fake."""
+    import bugcap.ghcli as ghcli
+
+    if not hasattr(ghcli, "verify_repo_real"):
+        ghcli.verify_repo_real = ghcli.verify_repo  # for tests of the real function
+
+    def unavailable(*args, **kwargs):
+        raise ghcli.GhUnavailable("offline in tests")
+
+    monkeypatch.setattr(ghcli, "verify_repo", unavailable)

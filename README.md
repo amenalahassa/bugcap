@@ -112,6 +112,12 @@ bugcap tag <id> remove ui
 bugcap github pull --repo owner/repo --label bug --limit 20 --ask
 bugcap attach <id> --image ./shot.png      # add an image to any report
 
+# Change the values set at init later, without --force (validated; offers to move existing reports).
+bugcap config repo show
+bugcap config repo set images_repo owner/assets
+bugcap config repo set github owner/new-name --migrate    # or --no-migrate; required when not interactive
+bugcap attach <id> --image ./after.png --note "after the fix"   # note is appended, tied to the image
+
 # GitHub: push a report — create/comment an issue AND commit a plain image copy agents can read.
 bugcap sync <id> --to github --images-repo owner/assets --yes
 
@@ -131,6 +137,18 @@ Media over `[sync] max_upload_mb` (default 25) is skipped on `sync` with a warni
 Statuses accepted by `edit --status`: `open`, `in-progress`, `resolved`, `closed`, `wontfix`
 (free-text values from older databases are tolerated on read).
 
+**Repo values.** `bugcap init`, `bugcap sync` and `bugcap config repo set` check that `--github`,
+`--images-repo` (`owner/repo`), `--images-path` and `--images-branch` are well formed and, with `gh`,
+that the repo exists, is writable and has the branch; offline or logged out they only warn. If
+`init --force` or `config repo set/unset` changes the repo identity (GitHub slug or tag) and reports
+are stored under the old one, you are asked whether to move them (the shown counts and old/new values
+come first); non-interactive runs must pass `--migrate` or `--no-migrate`.
+
+**`attach --note`.** The text is appended to the existing notes as `[2026-10-04 10:15] @3: text`, so
+it is timestamped and references the image added with it. On a terminal, `attach` asks for an
+optional note after the capture; the MCP `request_screenshot` tool takes an optional `note`, and so
+does the `--ask` flow of `github pull`.
+
 ### Where data lives (per-OS)
 
 | Platform | Data (`bugcap.db`, `images/`) | Config (`config.toml`) |
@@ -144,6 +162,14 @@ Linux location is unchanged, so existing databases keep working; they are migrat
 (a `repo` and `body` column are added) with no data loss.
 
 ### Using it from Claude Code (MCP)
+
+`bugcap mcp-serve` logs startup, each client's initialize, every tool call (arguments' names,
+outcome, duration) and errors with tracebacks, to `logs/mcp-server.log` in the data directory
+(rotated, 1 MB x 3) and to stderr; stdout is reserved for the protocol. Choose the level with
+`--log-level debug|info|warning|error`, `BUGCAP_LOG_LEVEL` or `[log] level` in `config.toml`, and the
+file with `--log-file`, `BUGCAP_LOG_FILE` or `[log] file`. Argument values (such as notes) are only
+logged at `debug`.
+
 
 Requires the extra (`pipx install 'bugcap[mcp]'` or `uv tool install 'bugcap[mcp]'`):
 
@@ -180,7 +206,9 @@ Module map (`src/bugcap/`):
 | `live.py` + `live_session.py` + `drafts.py` | Tk control window (thin) over a pure state machine; drafts on disk. |
 | `dashboard/` | `http.server` UI + JSON API (loopback, Host/Origin checks, write token, Range media, static allowlist). |
 | `repo.py` + `tomlio.py` | `.bugcap.toml` discovery/read/write (tag, github slug, `[sync]`). |
-| `config.py` | Global `config.toml`: `[sync]` defaults and `[consent]` for image commits. |
+| `config.py` | Global `config.toml`: `[sync]` defaults, `[consent]` for image commits, `[log]`. |
+| `validation.py` | Format checks for repo slugs, images path and branch names. |
+| `logs.py` | `mcp-serve` logging (rotating file + stderr, never stdout). |
 | `ghcli.py` | Thin `gh` wrapper (argv lists; large payloads via stdin). **Transport.** |
 | `sync.py` | `Destination` protocol, `GitHubDestination`, `pull_issues`, `sync_report`. **Policy.** |
 | `agent_api.py` | SDK-free tool logic for the six MCP tools. |
