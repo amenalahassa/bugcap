@@ -31,3 +31,26 @@ is a separate `bugcap edit` afterwards, which loses the link between the note an
 `@` image references exist). Without `--note` on an interactive terminal, prompt for an optional
 note after the capture, as `capture` does. The same applies to the MCP `request_screenshot` tool
 (optional note argument) and to the `--ask` flow of `github pull`.
+
+## `--images-repo` value is not validated
+
+`bugcap init --images-repo X` and `bugcap sync --images-repo X` accept any string. Nothing checks
+that it is a well-formed `owner/repo` slug, or that the repo exists and is writable with the
+current `gh` login, so a typo only surfaces later as a failed commit during `sync` (or, worse, a
+partial sync).
+
+**Expected:** validate the slug format immediately (also for `--github`, `--images-path` and
+`--images-branch`), and verify via `gh` that the repo exists, is writable and that the branch
+exists, with a clear error naming the bad value. Offline or unauthenticated, warn and continue
+rather than refuse.
+
+## No way to change the values set at `init` without `--force`
+
+The tag, GitHub slug and `[sync]` values (`images_repo`, `images_path`, `images_branch`) can only
+be changed by re-running `bugcap init --force`, which rewrites `.bugcap.toml` wholesale (and
+currently orphans existing data, see above).
+
+**Expected:** a dedicated command, e.g. `bugcap config repo set <key> <value>` /
+`bugcap config repo show` (or `bugcap init --update`), that changes individual keys of the current
+repo's `.bugcap.toml`, validates the new value (see above) and, for tag/slug changes, offers to
+migrate existing reports as described in the `init --force` entry.
