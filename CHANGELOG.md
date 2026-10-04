@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.1 - 2026-10-04
+
+### Added
+- **Documentation site:** GitHub Pages with a landing page and a usage guide (`docs/`), linked from the README.
+- **Release workflow:** tests on push and pull requests; on a `v*` tag, the package is built and published to PyPI with trusted publishing.
+
+### Fixed
+- `uv.lock` records the current package version.
+
 ## 0.2.0 - 2026-10-04
 
 ### Added
