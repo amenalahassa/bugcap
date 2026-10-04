@@ -1,6 +1,7 @@
 """T026: `bugcap attach`."""
 import pytest
 
+from fixtures.make_images import png_bytes
 from bugcap import backends, capture, cli
 from bugcap.store import Store
 
@@ -9,7 +10,7 @@ def test_attach_image_appends(bugcap_home, tmp_path):
     with Store() as store:
         rid = store.add("Bug", image_paths=["existing.png"]).id
     img = tmp_path / "new.png"
-    img.write_bytes(b"png")
+    img.write_bytes(png_bytes())
     assert cli.main(["attach", str(rid), "--image", str(img)]) == 0
     with Store() as store:
         paths = store.get(rid).image_paths
@@ -21,7 +22,7 @@ def test_attach_without_image_captures(bugcap_home, monkeypatch, tmp_path):
     with Store() as store:
         rid = store.add("Bug").id
     shot = tmp_path / "cap.png"
-    shot.write_bytes(b"png")
+    shot.write_bytes(png_bytes())
     monkeypatch.setattr(capture, "capture_screenshot", lambda: shot)
     assert cli.main(["attach", str(rid)]) == 0
     with Store() as store:

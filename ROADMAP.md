@@ -29,18 +29,12 @@ Items are in priority order. Status: `[x]` done, `[~]` started (partial code, no
       private). The repo-committed copy is kept; an S3/R2 store (6) is an optional extra, not a
       replacement.
 - [ ] 9. Additional trackers (Linear, Jira, Trello) behind the same `Destination` interface *(deferred)*
-
-## Backlog (unprioritized)
-
-- [ ] **Associate existing images to a bug**: from a local file, a path, or a URL (downloaded into
-      the store), on `capture`, `attach`, or later via `bugcap attach <id> --image <path|url>`
-- [ ] **Reference specific images from the notes with `@`**: e.g. `@1` or `@login-error` in notes
-      resolves to that report's image (images get a stable index and optional label); validated on
-      save, rendered inline in `show`, the dashboard and synced issues
-- [ ] **Screen recording for complex bugs**: record the screen and store the result, by user
-      choice, as either a video (mp4/webm) or a short burst of frames / animated image
-      (GIF/APNG/WebP) for more efficient storage. Needs a per-OS recorder backend (detect/install
-      like capture backends) and a size/duration cap
-- [ ] **Dashboard (web app)**: `bugcap dashboard` starts a local web UI to browse, filter (repo,
-      tag, status) and open bugs with their images/recordings and `@` references; local-only by
-      default (binds to 127.0.0.1)
+- [x] 10. **Associate existing images to a bug**: `--image` (path, glob or URL) on `capture` and
+      `attach`, plus `bugcap images`; validated by magic bytes and copied into the store; MCP
+      `attach_image`
+- [x] 11. **`@` references in notes** (`@1`, `@login-error`): validated on save, resolved in
+      `show`, GitHub sync, MCP and the dashboard; relabel/remove rewrite them with `--force`
+- [x] 12. **Screen recording** (`bugcap record`): ffmpeg / wf-recorder, video, keyframes or
+      animated GIF, duration and size caps; `bugcap live` for rapid multi-report capture
+- [x] 13. **Dashboard** (`bugcap dashboard`): local web UI over the same service layer,
+      127.0.0.1 only by default

@@ -68,3 +68,19 @@ def consent_add(slug: str) -> None:
     data = load()
     data.setdefault("consent", {})["images_repos"] = ",".join(repos)
     tomlio.save(config_path(), data)
+
+
+DEFAULT_MAX_UPLOAD_MB = 25
+HARD_MAX_UPLOAD_MB = 100  # GitHub rejects larger files in a normal commit (see research.md)
+
+
+def get_max_upload_mb() -> float:
+    """`[sync] max_upload_mb`: per-file size above which media is not uploaded to GitHub."""
+    raw = load().get("sync", {}).get("max_upload_mb")
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return float(DEFAULT_MAX_UPLOAD_MB)
+    if value <= 0:
+        return float(DEFAULT_MAX_UPLOAD_MB)
+    return min(value, float(HARD_MAX_UPLOAD_MB))

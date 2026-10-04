@@ -33,6 +33,7 @@
 
 - Iteration 1: all items pass except the two marked partial (named-tool requirement, which is intentional).
 - Clarifications: none needed; defaults in Assumptions can be changed during `/speckit-clarify`.
+- Iteration 2 (Story 5, live capture mode added): new story has 11 acceptance scenarios; FR-041 to FR-052 and SC-010 to SC-012 added. Checked: each FR is testable, no new markers. Same `[~]` exception as iteration 1 applies to the GUI-toolkit assumption, which is stated as an assumption rather than a requirement.
 
 ## Notes
 

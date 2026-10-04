@@ -4,6 +4,7 @@ The expected strings below are the exact pre-feature formats; the test fails if 
 scoping/repo change leaks into output when there is no .bugcap.toml in scope."""
 import pytest
 
+from fixtures.make_images import png_bytes
 from bugcap import cli
 from bugcap.store import Store
 
@@ -11,7 +12,7 @@ from bugcap.store import Store
 def test_capture_output_unchanged(bugcap_home, tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)  # not a git repo / no .bugcap.toml
     img = tmp_path / "s.png"
-    img.write_bytes(b"png")
+    img.write_bytes(png_bytes())
     cli.main(["capture", "--image", str(img), "--title", "Broken thing", "--note", "n"])
     out = capsys.readouterr().out.splitlines()
     assert out[0] == "Saved report #1: Broken thing"

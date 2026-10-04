@@ -119,3 +119,47 @@ def test_pull_issues_without_repo_errors(bugcap_home, no_repo):
     with Store() as store:
         out = agent_api.pull_issues(store)
     assert "error" in out
+
+
+# --- feature 002: media tools -----------------------------------------------------
+
+def test_attach_image_partial_and_get_report_media(bugcap_home, sample_images):
+    with Store() as store:
+        rid = store.add("Bug").id
+        out = agent_api.attach_image(
+            store, rid, [str(sample_images / "sample.png"), str(sample_images / "not-image.txt")], ["login-error", None]
+        )
+        assert out["report_id"] == rid
+        assert out["added"][0]["index"] == 1 and out["added"][0]["label"] == "login-error"
+        assert out["rejected"][0]["source"].endswith("not-image.txt")
+
+        agent_api.update_notes(store, rid, "see @1")
+        got = agent_api.get_report(store, rid)
+        assert got["report"]["media"] == [
+            {"index": 1, "label": "login-error", "kind": "image", "mime": "image/png", "size_bytes": out["added"][0]["size_bytes"]}
+        ]
+        assert got["resolved_references"] == [{"token": "@1", "index": 1}]
+        assert len(got["images"]) == 1
+
+
+def test_attach_image_errors_are_structured(bugcap_home, sample_images):
+    with Store() as store:
+        rid = store.add("Bug").id
+        assert agent_api.attach_image(store, 99, [str(sample_images / "sample.png")])["code"] == "not_found"
+        assert agent_api.attach_image(store, rid, [])["code"] == "bad_query"
+        agent_api.attach_image(store, rid, [str(sample_images / "sample.png")], ["a"])
+        dup = agent_api.attach_image(store, rid, [str(sample_images / "sample.gif")], ["A"])
+        assert dup["code"] == "duplicate_label"
+
+
+def test_update_notes_validates_references(bugcap_home, sample_images):
+    with Store() as store:
+        rid = store.add("Bug").id
+        agent_api.attach_image(store, rid, [str(sample_images / "sample.png")], ["shot"])
+        ok = agent_api.update_notes(store, rid, "@1 and @shot")
+        assert [r["token"] for r in ok["references"]] == ["@1", "@shot"]
+
+        bad = agent_api.update_notes(store, rid, "@3")
+        assert bad["code"] == "invalid_reference" and bad["token"] == "@3"
+        assert bad["valid"] == ["@1", "@shot"]
+        assert store.get(rid).notes == "@1 and @shot"

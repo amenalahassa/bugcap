@@ -1,6 +1,9 @@
 """Shared pytest fixtures: BUGCAP_HOME isolation, throwaway git repos, a fake `gh`."""
 import subprocess
 import sys
+import threading
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
@@ -102,7 +105,125 @@ def fake_gh(monkeypatch):
     return fake
 
 
+@dataclass
+class HttpFixture:
+    base: str
+    requests: list = field(default_factory=list)  # [(path, headers dict)]
+
+    def url(self, path: str) -> str:
+        return self.base + path
+
+
+@pytest.fixture
+def http_server():
+    """Local HTTP server for URL-ingestion tests; records request headers."""
+    from fixtures.make_images import png_bytes
+
+    fixture = HttpFixture(base="")
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def _send(self, code, ctype, body, extra=None):
+            self.send_response(code)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(body)))
+            for k, v in (extra or {}).items():
+                self.send_header(k, v)
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_GET(self):
+            fixture.requests.append((self.path, {k.lower(): v for k, v in self.headers.items()}))
+            try:
+                if self.path == "/ok.png":
+                    self._send(200, "image/png", png_bytes())
+                elif self.path == "/page.html":
+                    self._send(200, "text/html", b"<html><body>nope</body></html>")
+                elif self.path == "/big.png":
+                    self._send(200, "image/png", png_bytes() + b"\0" * (2 * 1024 * 1024))
+                elif self.path == "/slow":
+                    time.sleep(3)
+                    self._send(200, "image/png", png_bytes())
+                elif self.path == "/redirect-loop":
+                    self._send(302, "text/plain", b"", {"Location": "/redirect-loop"})
+                elif self.path == "/redirect-file":
+                    self._send(302, "text/plain", b"", {"Location": "file:///etc/passwd"})
+                elif self.path == "/redirect-ok":
+                    self._send(302, "text/plain", b"", {"Location": "/ok.png"})
+                else:
+                    self._send(404, "text/plain", b"missing")
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    server.daemon_threads = True
+    fixture.base = f"http://127.0.0.1:{server.server_address[1]}"
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    yield fixture
+    server.shutdown()
+    server.server_close()
+
+
 # Make `src/` importable without an install when tests run from a checkout.
 _src = Path(__file__).resolve().parent.parent / "src"
 if _src.is_dir() and str(_src) not in sys.path:
     sys.path.insert(0, str(_src))
+
+
+@pytest.fixture
+def sample_images(tmp_path):
+    """Directory holding sample.png/.jpg/.gif/.webp and not-image.txt."""
+    from fixtures.make_images import write_all
+
+    directory = tmp_path / "samples"
+    write_all(directory)
+    return directory
+
+
+@pytest.fixture
+def dashboard(bugcap_home):
+    """A running in-process dashboard on a free port; `call(method, path, ...)` returns
+    (status, headers, body-bytes)."""
+    import http.client
+    import json as _json
+
+    from bugcap.dashboard.server import make_server
+
+    server = make_server("127.0.0.1", 0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    class Client:
+        pass
+
+    client = Client()
+    client.server, client.token, client.port = server, server.token, server.port
+
+    def call(method, path, body=None, headers=None, token=True, host=None):
+        conn = http.client.HTTPConnection("127.0.0.1", server.port, timeout=5)
+        hdrs = {"Host": host or f"127.0.0.1:{server.port}"}
+        if token and method != "GET":
+            hdrs["X-Bugcap-Token"] = server.token
+        hdrs.update(headers or {})
+        data = None
+        if body is not None:
+            data = _json.dumps(body).encode()
+            hdrs["Content-Type"] = "application/json"
+        conn.request(method, path, body=data, headers=hdrs)
+        resp = conn.getresponse()
+        raw = resp.read()
+        out = (resp.status, {k.lower(): v for k, v in resp.getheaders()}, raw)
+        conn.close()
+        return out
+
+    def jcall(*a, **k):
+        status, headers, raw = call(*a, **k)
+        return status, _json.loads(raw) if raw else None
+
+    client.call, client.json = call, jcall
+    yield client
+    server.shutdown()
+    server.server_close()

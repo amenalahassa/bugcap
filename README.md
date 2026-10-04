@@ -82,6 +82,22 @@ bugcap capture --title "Dashboard empty after module creation" \
                 --tag ui
 bugcap capture --image ./shot.png --title "Broken" --note "no capture tool needed"
 
+# Images: attach existing files, globs or URLs (validated, copied into the store), with labels.
+bugcap capture --image ./a.png --label login-error --title "Login fails" --note "See @1 and @login-error"
+bugcap attach <id> --image './shots/*.png' --image https://ci.example.com/run/42.png --label after-fix
+bugcap images <id>                              # index, label, kind, size
+bugcap images <id> relabel login-error sign-in  # refused while notes reference it, unless --force
+bugcap images <id> remove 2 --force             # rewrites @ references (removed ones: [image removed])
+
+# Record the screen (needs ffmpeg, or wf-recorder on Wayland): animated GIF (default), video, or keyframes.
+bugcap record --id <id> --format animated --max-seconds 10   # Enter or Ctrl+C stops early
+
+# Report many bugs in a row from a small always-on-top window (needs tkinter and a desktop session).
+bugcap live
+
+# Browse, filter and triage in a local web page (127.0.0.1 only; --host exposes it on purpose).
+bugcap dashboard --port 8765 --open
+
 # List reports (current repo only inside an initialized repo; everything with --all) and show one.
 bugcap list
 bugcap list --all
@@ -102,6 +118,15 @@ bugcap sync <id> --to github --images-repo owner/assets --yes
 # Run the MCP server (needs the 'mcp' extra) so coding agents can read/request reports.
 bugcap mcp-serve
 ```
+
+**`@` references.** In notes, `@1` (image index) or `@login-error` (label) points at that report's
+image or recording. They are checked when notes are saved (`capture --note`, `edit --note`, MCP
+`update_notes`, the dashboard): an unknown one is refused and the valid ones are listed. `@@`
+writes a literal `@`; code spans, fenced blocks and email addresses are never references. `show`
+resolves them, and `sync` replaces them with image/links in the GitHub issue. Relabelling or
+removing a referenced image needs `--force`, which rewrites the notes in the same transaction.
+
+Media over `[sync] max_upload_mb` (default 25) is skipped on `sync` with a warning.
 
 Statuses accepted by `edit --status`: `open`, `in-progress`, `resolved`, `closed`, `wontfix`
 (free-text values from older databases are tolerated on read).
@@ -132,9 +157,11 @@ or in `.mcp.json`:
 { "mcpServers": { "bugcap": { "command": "bugcap", "args": ["mcp-serve"] } } }
 ```
 
-The server exposes four tools: `list_reports`, `get_report` (returns the image bytes as image
-content), `request_screenshot` (asks you to capture for a report or issue; returns immediately
-when there is no desktop UI), and `pull_issues`.
+The server exposes six tools: `list_reports`, `get_report` (returns the image bytes as image
+content, plus media metadata and resolved `@` references), `request_screenshot` (asks you to
+capture for a report or issue; returns immediately when there is no desktop UI), `pull_issues`,
+`attach_image` (paths, globs or URLs, with optional labels) and `update_notes` (validated `@`
+references; errors come back as JSON with a `code`).
 
 ## Architecture
 
@@ -145,13 +172,19 @@ Module map (`src/bugcap/`):
 | `paths.py` | Per-OS data/config dirs; `BUGCAP_HOME` override. |
 | `capture.py` | Import or capture images (`flameshot`/`satty`+`grim`/`screencapture`); `has_display()`. |
 | `backends.py` | Capture-tool detection, per-OS install commands, manual guidance. |
-| `store.py` | SQLite store (`reports`), `PRAGMA user_version` migrations, report API. |
+| `store.py` | SQLite store (`reports`, `media`, `media_frames`; schema v2), `PRAGMA user_version` migrations, report API, `transaction()`. |
+| `service.py` | **Shared rules** used by the CLI, MCP, dashboard and live mode: media add/relabel/remove, notes validation, reference rewrite, queries. Raises `ServiceError`. |
+| `ingest.py` | Path/glob/URL inputs: magic-byte validation, size/timeout/redirect limits, atomic copy into `images/`. |
+| `refs.py` | `@` reference parsing (code/email aware), validation, rewrite, display. |
+| `recorder.py` | `ffmpeg`/`wf-recorder` argv per OS, stop/caps watchdogs, animated/frames post-processing. |
+| `live.py` + `live_session.py` + `drafts.py` | Tk control window (thin) over a pure state machine; drafts on disk. |
+| `dashboard/` | `http.server` UI + JSON API (loopback, Host/Origin checks, write token, Range media, static allowlist). |
 | `repo.py` + `tomlio.py` | `.bugcap.toml` discovery/read/write (tag, github slug, `[sync]`). |
 | `config.py` | Global `config.toml`: `[sync]` defaults and `[consent]` for image commits. |
 | `ghcli.py` | Thin `gh` wrapper (argv lists; large payloads via stdin). **Transport.** |
 | `sync.py` | `Destination` protocol, `GitHubDestination`, `pull_issues`, `sync_report`. **Policy.** |
-| `agent_api.py` | SDK-free tool logic (`list_reports`/`get_report`/`request_screenshot`/`pull_issues`). |
-| `mcp_server.py` | Lazy-imports the `mcp` SDK; registers the four `agent_api` tools over stdio. |
+| `agent_api.py` | SDK-free tool logic for the six MCP tools. |
+| `mcp_server.py` | Lazy-imports the `mcp` SDK; registers the `agent_api` tools over stdio. |
 | `cli.py` | All subcommands. |
 
 The **store is the one shared surface**. Capture writes to it; the CLI, the MCP server, and the
@@ -165,7 +198,8 @@ that protocol — the CLI and store don't change. Refs are namespaced per destin
 
 - `github.issue` → `owner/repo#N`
 - `github.comment_hash` → sha256 of the last synced content (so re-sync comments only on change)
-- `github.image.<basename>` → `owner/repo:path@commit` (so each image is committed at most once)
+- `github.image.<basename>` / `github.media.<basename>` → `owner/repo:path@commit` (so each file is committed at most once)
+- `github.frame.<idx>.<n>` and `github.frames.<idx>` → keyframes of a recording (one commit per frame; GitHub's contents API commits one file at a time)
 
 These refs also make pull and sync **idempotent and resumable**: each step is persisted as it
 succeeds, so a re-run skips what is already recorded.

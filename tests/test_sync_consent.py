@@ -128,3 +128,15 @@ def test_resolution_order(tmp_path):
     # issue repo with default path last
     t = resolve_images_target(None, None, None, None, {}, "issue/repo")
     assert (t.repo, t.path, t.branch) == ("issue/repo", "bugcap-images", None)
+
+
+def test_max_upload_mb_default_and_clamp(bugcap_home):
+    from bugcap import config
+
+    assert config.get_max_upload_mb() == 25
+    config.set_value("sync.max_upload_mb", "40")
+    assert config.get_max_upload_mb() == 40
+    config.set_value("sync.max_upload_mb", "5000")
+    assert config.get_max_upload_mb() == 100  # GitHub blocks files over 100 MB
+    config.set_value("sync.max_upload_mb", "-3")
+    assert config.get_max_upload_mb() == 25

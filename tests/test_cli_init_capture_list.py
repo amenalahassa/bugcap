@@ -1,6 +1,7 @@
 """T016: init writes config; capture scopes inside a repo; list filters; --all; legacy rows."""
 import pytest
 
+from fixtures.make_images import png_bytes
 from bugcap import cli, repo
 from bugcap.store import Store
 
@@ -31,7 +32,7 @@ def test_capture_image_scoped_inside_repo(bugcap_home, git_repo, monkeypatch, tm
     capsys.readouterr()
 
     img = tmp_path / "shot.png"
-    img.write_bytes(b"png")
+    img.write_bytes(png_bytes())
     assert cli.main(["capture", "--image", str(img), "--title", "Broken", "--note", "x"]) == 0
 
     with Store() as store:
@@ -45,7 +46,7 @@ def test_capture_image_scoped_inside_repo(bugcap_home, git_repo, monkeypatch, tm
 def test_capture_outside_repo_unchanged(bugcap_home, tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)  # not a repo
     img = tmp_path / "s.png"
-    img.write_bytes(b"png")
+    img.write_bytes(png_bytes())
     assert cli.main(["capture", "--image", str(img), "--title", "T", "--note", "n"]) == 0
     out = capsys.readouterr().out
     assert out.startswith("Saved report #1: T")

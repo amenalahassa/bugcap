@@ -49,7 +49,7 @@ A developer writes notes such as "Error appears after step 3, see @1 and @login-
 6. **Given** a report, **When** the user runs `bugcap show <id>`, **Then** each reference outside code is printed with the resolved image path beside it.
 7. **Given** a report that has been synced to GitHub, **When** the sync is run, **Then** each `@n` reference in the synced issue body or comment is replaced with the image markdown or link used for that sync.
 8. **Given** an image that is referenced by notes, **When** the user relabels or removes it, **Then** the command is refused and lists the referencing notes, unless `--force` is given; with `--force`, the references are rewritten to match the new label or removed (the token is replaced by its plain text with the image no longer resolving, so nothing dangles silently).
-9. **Given** a relabel or removal that renumbers later images, **When** the change is applied, **Then** `@n` references pointing at the later images are rewritten to their new numbers so they still point at the same image.
+9. **Given** an image is removed while later images exist, **When** the change is applied, **Then** the later images keep their indexes (indexes are never reused or renumbered), so `@n` references to them still point at the same image.
 
 ---
 
@@ -101,7 +101,29 @@ A developer runs `bugcap dashboard` to open a web page on their own machine. The
 11. **Given** a phone-sized screen or a dark-mode system setting, **When** the dashboard is opened, **Then** the layout remains usable and the colours follow the system theme.
 12. **Given** the dashboard page, **When** it loads, **Then** it makes no requests to external hosts; all scripts and styles are served locally.
 
-### Edge Cases
+### User Story 5 - Report many bugs in a row from a floating control window (Priority: P2)
+
+A tester is going through an app and finds several bugs in quick succession. Instead of typing a command for each one, they run `bugcap live` once. A small control window stays on top of all other windows. They click **Start**, select the area to capture with the usual capture tool, and a details window opens with the screenshot already attached. They enter a title, notes, tags and status, click **Save**, and the control window is ready again for the next bug. The session continues until they close the control window.
+
+**Why this priority**: It turns bugcap into a continuous reporting tool during testing, which is the main use case for a bug reporter. It reuses the capture, image and `@` reference stories, so it comes after them, but it is independent of recording and the dashboard.
+
+**Independent Test**: Run `bugcap live`, confirm a small window appears above a maximized browser, click Start, capture a region, fill a title and save; repeat for a second bug without running any other command; verify two reports exist with their screenshots, and that the control window shows "2 saved this session".
+
+**Acceptance Scenarios**:
+
+1. **Given** the user runs `bugcap live` inside an initialized repo, **When** the control window appears, **Then** it stays above other application windows and shows a Start button and a count of reports saved in this session.
+2. **Given** the control window is ready, **When** the user clicks Start, **Then** the capture tool used by `bugcap capture` opens, and the control window shows that a capture is in progress.
+3. **Given** the user completes the capture, **When** the image is taken, **Then** a details window opens with the screenshot shown as image 1 and empty fields for title, notes, tags and status (status defaulting to open), and the repo tag of the launch directory pre-filled.
+4. **Given** the details window is open, **When** the user enters a title and notes and clicks Save, **Then** a new report is stored with the screenshot and the entered details, the details window closes, and the control window returns to ready with the count increased by one.
+5. **Given** notes containing `@1` in the details window, **When** the user saves, **Then** the same `@` validation as the CLI applies, and an invalid reference keeps the window open with the error shown beside the notes.
+6. **Given** the user clicks Start several times, **When** a capture is already in progress or a details window is open, **Then** the extra clicks are ignored and no second capture starts.
+7. **Given** the user cancels the capture without taking an image, **When** the capture tool closes with nothing, **Then** the control window returns to ready and nothing is saved.
+8. **Given** the details window has unsaved input, **When** the user clicks Discard, **Then** a confirmation is shown first, and only after confirming is the capture and its input dropped.
+9. **Given** the user closes the control window while a details window is open with unsaved input, **When** they confirm closing, **Then** the unsaved capture is kept as a draft and offered again the next time `bugcap live` starts in that repo; declining keeps the window open.
+10. **Given** the desktop does not allow windows to stay on top, **When** the control window opens, **Then** it still works as a normal window and shows a one-line notice that it cannot stay on top.
+11. **Given** the user runs `bugcap live` without a usable window system (for example over SSH), **When** it starts, **Then** it explains that a desktop session is needed and exits without creating anything.
+
+---
 
 - A glob that matches nothing is an error naming the pattern, not a silent no-op.
 - A glob that matches a directory or a non-image file skips that entry with a reported reason; a glob matching only invalid files is an error.
@@ -177,6 +199,21 @@ A developer runs `bugcap dashboard` to open a web page on their own machine. The
 - **FR-039**: The feature MUST NOT add a required third-party runtime dependency; the dashboard MUST run on the Python standard library alone.
 - **FR-040**: Existing databases MUST be upgraded in place with no data loss.
 
+**Live capture mode (Story 5)**
+
+- **FR-041**: `bugcap live` MUST open a small control window that stays above other application windows where the desktop allows it, and MUST keep running until the user closes it.
+- **FR-042**: The control window MUST offer a Start action that runs the same capture backend as `bugcap capture`; no new capture technology is introduced.
+- **FR-043**: Each completed capture MUST open a details window containing the screenshot (as image 1), title, notes, tags, and status (default open), with the repo tag of the launch directory pre-filled.
+- **FR-044**: Save MUST store a new report with the screenshot and the entered details, then return the control window to ready without restarting the command.
+- **FR-045**: The control window MUST show how many reports were saved in the current session.
+- **FR-046**: Only one capture or details window may be active at a time; further Start actions while one is active MUST be ignored.
+- **FR-047**: Notes in the details window MUST be validated with the same `@` rules as the CLI; an invalid reference MUST keep the window open and show the error.
+- **FR-048**: Discard MUST ask for confirmation before dropping the capture and any typed input.
+- **FR-049**: Closing the control window with an unsaved details window MUST ask for confirmation; on confirm, the capture is kept as a draft and offered again on the next `bugcap live` run in the same repo.
+- **FR-050**: When windows cannot stay on top on the current desktop, the control window MUST still work and MUST say so in one line.
+- **FR-051**: Without a usable desktop session, `bugcap live` MUST explain the requirement and exit without side effects.
+- **FR-052**: Live capture MUST NOT require the user to type any further command between reports.
+
 ### Key Entities *(include if feature involves data)*
 
 - **Report**: an existing bug record; gains the ability to hold ordered media items and to be referred to from its own notes.
@@ -197,6 +234,9 @@ A developer runs `bugcap dashboard` to open a web page on their own machine. The
 - **SC-007**: Every existing report survives the upgrade with its notes, tags, status, repo and sync references unchanged.
 - **SC-008**: No request from another web page, and no request for a path outside the media folders, succeeds in the dashboard.
 - **SC-009**: Existing commands and their output remain unchanged for users who do not use the new options.
+- **SC-010**: A tester can file five bugs in a row from one `bugcap live` session without typing any command between them.
+- **SC-011**: After a capture is taken, the details window is visible within one second, and a saved report appears in `bugcap list` before the control window is ready again.
+- **SC-012**: 100% of closes or discards with unsaved input ask for confirmation, and no confirmed-away capture is lost silently; declined closes keep the work.
 
 ## Assumptions
 
@@ -206,11 +246,15 @@ A developer runs `bugcap dashboard` to open a web page on their own machine. The
 - **Partial batch import**: when several inputs are given in one command, valid inputs are added and invalid ones are reported and skipped, so one bad URL does not discard the rest. This is stated in the command help.
 - **Notes save is all-or-nothing**: a bad reference refuses the whole save, and the old notes are kept. (Image batches are not all-or-nothing; see partial batch import above.)
 - **Label format**: letters, digits, hyphen and underscore; labels are case-sensitive for matching but compared case-insensitively for uniqueness.
-- **Index stability**: indexes are never reused; renumbering only happens when an image is removed with `--force` and the rewrite then keeps existing references pointing at the same image.
+- **Index stability**: indexes are never reused and never renumbered; removing an image with `--force` only replaces references to that image, and every other `@n` keeps pointing at the same image.
 - **Media storage**: stored copies live under the store's existing image directory for images and a sibling media directory for recordings and frames; original files are never referenced in place.
 - **Recorder tools**: the feature uses already-installed command-line recorders (ffmpeg, wf-recorder) and does not bundle its own. `bugcap setup` extends its detection and install guidance to cover them.
 - **Dashboard session token**: generated per dashboard process and embedded in the page served by that process; it is not stored on disk and is not sent to any external host.
 - **Dashboard scope**: read-mostly; it does not create reports, upload images, or start recordings in this version, and changes are limited to status, tags and notes.
 - **Out of scope**: S3/R2 object storage (item 6), other trackers such as Linear, Jira, Trello (item 9), multi-user or remote access to the dashboard, and authentication beyond the local session token.
 - **Existing behaviour**: the MCP server, GitHub pull/sync and `bugcap setup` keep their current behaviour; the new options and tools are additions.
+- **Live mode control window**: a small always-on-top window with a Start button, built with a GUI toolkit that ships with Python (no new runtime dependency). On desktops that refuse always-on-top (some Wayland compositors), it runs as a normal window with a notice.
+- **Live mode capture**: each Start uses the existing capture backend, so the region selection is whatever the installed tool provides (for example flameshot or satty on Linux, Snipping Tool on Windows, `screencapture` on macOS).
+- **Live mode drafts**: unsaved captures are kept under the store's data directory until saved or discarded; they are not stored as reports.
+- **Live mode repo**: the repo tag comes from the directory `bugcap live` was launched in; running it outside an initialized repo creates reports with no repo tag, as `capture` does.
 - **Zero clarification markers**: all open choices above have reasonable defaults recorded here, so no questions are blocking planning. Any of them can be changed during `/speckit-clarify`.

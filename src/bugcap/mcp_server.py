@@ -31,7 +31,7 @@ def _image_format(mime: str) -> str:
 
 
 def build_server():
-    """Construct the FastMCP server with the four tools registered."""
+    """Construct the FastMCP server with the tools registered."""
     try:
         from mcp.server.fastmcp import FastMCP, Image
     except ImportError as exc:  # pragma: no cover - exercised via subprocess test
@@ -80,6 +80,19 @@ def build_server():
         """Import GitHub issues as reports (same as `bugcap github pull`)."""
         with Store() as store:
             return json.dumps(agent_api.pull_issues(store, repo=repo, labels=labels, limit=limit))
+
+    @server.tool()
+    def attach_image(id: int, sources: list[str], labels: Optional[list[Optional[str]]] = None) -> str:
+        """Attach images (file paths, globs or http(s) URLs) to a report, with optional labels
+        (one per source, null for none). Notes can then refer to them as @1 or @label."""
+        with Store() as store:
+            return json.dumps(agent_api.attach_image(store, id, sources, labels))
+
+    @server.tool()
+    def update_notes(id: int, notes: str) -> str:
+        """Replace a report's notes. @1 / @label references must point at the report's images."""
+        with Store() as store:
+            return json.dumps(agent_api.update_notes(store, id, notes))
 
     return server
 

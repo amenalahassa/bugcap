@@ -1,4 +1,4 @@
-"""SDK-free implementations of the four agent tools. `mcp_server.py` merely registers
+"""SDK-free implementations of the agent tools. `mcp_server.py` merely registers
 these, so the logic is unit-testable without the MCP SDK installed."""
 from __future__ import annotations
 
@@ -7,7 +7,8 @@ import threading
 from pathlib import Path
 from typing import Callable, Optional
 
-from . import capture, repo, sync
+from . import capture, refs, repo, service, sync
+from .errors import ServiceError
 from .store import Report, Store
 
 _MIME = {
@@ -56,18 +57,70 @@ def list_reports(
     return [_summary(r) for r in reports]
 
 
+def _media_meta(media) -> list[dict]:
+    return [
+        {
+            "index": m.idx,
+            "label": m.label,
+            "kind": m.kind,
+            "mime": m.mime,
+            "size_bytes": m.size_bytes,
+            **({"frames": len(m.frames)} if m.kind == "frames" else {}),
+        }
+        for m in media
+    ]
+
+
 def get_report(store: Store, id: int) -> dict:
     report = store.get(id)
     if report is None:
         return {"error": f"no report with id {id}"}
     data = _summary(report)
-    data.update({"body": report.body, "notes": report.notes, "image_paths": report.image_paths})
+    data.update({
+        "body": report.body,
+        "notes": report.notes,
+        "image_paths": report.image_paths,
+        "media": _media_meta(report.media),
+    })
     images = []
     for path in report.image_paths:
         p = Path(path)
         if p.is_file():
             images.append({"path": path, "mime": _mime(p), "bytes": p.read_bytes()})
-    return {"report": data, "images": images}
+    resolved = [
+        {"token": r.token, "index": found.idx}
+        for r in refs.parse_references(report.notes)
+        if r.kind in ("index", "label") and (found := refs.resolve(r, report.media)) is not None
+    ]
+    return {"report": data, "images": images, "resolved_references": resolved}
+
+
+def attach_image(store: Store, id: int, sources: list[str], labels: Optional[list] = None) -> dict:
+    """Attach images (paths, globs, http(s) URLs) to a report; partial batches are reported."""
+    if not sources or len(sources) > 20:
+        return {"code": "bad_query", "error": "sources must contain 1 to 20 entries"}
+    try:
+        result = service.add_media(store, id, list(sources), labels)
+    except ServiceError as exc:
+        return {"error": exc.message, **exc.as_dict()}
+    return {
+        "report_id": id,
+        "added": [
+            {"index": m.idx, "label": m.label, "kind": m.kind, "size_bytes": m.size_bytes, "source": m.source}
+            for m in result.added
+        ],
+        "rejected": [{"source": r["source"], "reason": r["reason"]} for r in result.rejected],
+    }
+
+
+def update_notes(store: Store, id: int, notes: str) -> dict:
+    """Replace a report's notes, validating `@` references against its images."""
+    try:
+        report = service.set_notes(store, id, notes)
+    except ServiceError as exc:
+        return {"error": exc.message, **exc.as_dict()}
+    view = service.get_report_view(store, id)
+    return {"report_id": report.id, "notes": report.notes, "references": view.references}
 
 
 def _resolve_slug(explicit: Optional[str]) -> Optional[str]:

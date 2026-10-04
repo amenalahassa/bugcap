@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; media-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'none'">
+<title>bugcap</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<header class="bar"><h1>bugcap</h1><span id="total" class="muted"></span></header>
+<main>
+  <section id="list-view">
+    <form id="filters" class="filters">
+      <input id="f-q" type="search" placeholder="Search title and notes" aria-label="Search">
+      <select id="f-status" aria-label="Status"><option value="">Any status</option></select>
+      <input id="f-tag" type="text" placeholder="Tag (comma separated)" aria-label="Tags">
+      <input id="f-repo" type="text" placeholder="Repo" aria-label="Repo">
+    </form>
+    <ul id="reports" class="reports"></ul>
+    <p id="empty" class="muted" hidden>No reports match.</p>
+  </section>
+  <section id="detail-view" hidden>
+    <button id="back" type="button">&larr; All reports</button>
+    <h2 id="d-title"></h2>
+    <p class="muted" id="d-meta"></p>
+    <div class="row">
+      <label>Status <select id="d-status"></select></label>
+      <span id="d-tags" class="tags"></span>
+      <form id="tag-form" class="inline"><input id="tag-input" placeholder="add tag" aria-label="Add tag"><button>Add</button></form>
+    </div>
+    <h3>Notes</h3>
+    <div id="d-notes" class="notes"></div>
+    <details><summary>Edit notes</summary>
+      <textarea id="notes-edit" rows="6"></textarea>
+      <div><button id="notes-save" type="button">Save notes</button> <span id="notes-msg" class="error" role="alert"></span></div>
+    </details>
+    <h3>Media</h3>
+    <div id="d-media" class="media"></div>
+    <p id="d-sync" class="muted"></p>
+  </section>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>
