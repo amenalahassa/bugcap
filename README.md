@@ -109,19 +109,12 @@ except the sync layer, and nothing requires a tracker to exist at all for captur
 
 ## Roadmap
 
-- [x] Capture (flameshot/satty shell-out) + local SQLite store + CLI (`capture`, `list`, `show`)
-- [ ] Read-only MCP server (`bugcap mcp-serve`) exposing `list`/`get`/image-bytes to any
-      MCP-capable agent, not just ones with direct filesystem access to the store
-- [ ] GitHub sync adapter (`bugcap sync <id> --to github`): `gh issue create --attach` for the
-      human-facing inline image, plus a plain (non-LFS) commit of the same file into the target
-      repo so any token-authenticated agent can read it back via the Contents API
-- [ ] Additional sync adapters (Linear, Jira, Trello) behind the same adapter interface
-- [ ] `bugcap edit <id>` / `bugcap tag <id>` for post-capture triage without re-shooting
+See [ROADMAP.md](ROADMAP.md).
 
 ## Design notes / deliberate non-goals
 
-- **No cloud storage, no vendor account.** The store is plain files on your disk. Sync is opt-in
-  and explicit, per report.
+- **No cloud storage by default, no vendor account.** The store is plain files on your disk. Sync
+  (GitHub, and optionally an S3/R2 object store) is opt-in and explicit, per report.
 - **Not a GitHub attachment replacement.** The CDN-attached image stays for humans browsing the
   issue normally; the repo-committed copy exists purely so agents can read it. Both are written
   on sync, deliberately redundant.

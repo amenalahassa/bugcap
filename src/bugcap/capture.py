@@ -3,6 +3,7 @@ import subprocess
 import uuid
 from pathlib import Path
 
+from . import backends
 from .paths import images_dir
 
 
@@ -10,42 +11,40 @@ class CaptureError(RuntimeError):
     pass
 
 
-def _detect_backend() -> str:
-    if shutil.which("flameshot"):
-        return "flameshot"
-    if shutil.which("satty"):
-        return "satty"
-    raise CaptureError(
-        "No capture backend found. Install 'flameshot' (X11/cross-platform) "
-        "or 'satty' (Wayland) and make sure it's on PATH."
+def _no_backend_error() -> CaptureError:
+    rec = backends.recommended()
+    return CaptureError(
+        "No capture tool found. Run `bugcap setup` to detect/install one "
+        f"(recommended: {rec.name} - {backends.guidance(rec)}), "
+        "or pass an existing screenshot with --image."
     )
 
 
+def import_image(source: Path) -> Path:
+    """Copy an existing image into the store (no capture tool needed)."""
+    if not source.is_file():
+        raise CaptureError(f"Image not found: {source}")
+    dest = images_dir() / f"{uuid.uuid4()}{source.suffix.lower() or '.png'}"
+    shutil.copyfile(source, dest)
+    return dest
+
+
 def capture_screenshot() -> Path:
-    """Launch the detected backend's interactive capture+annotate UI and return
-    the saved PNG path. Blocks until the user finishes annotating and saves/exits.
+    """Launch the detected backend's interactive capture UI and return the saved PNG path.
+    Blocks until the user finishes (saves or cancels).
     """
-    backend = _detect_backend()
+    backend = backends.detect()
+    if backend is None:
+        raise _no_backend_error()
     dest = images_dir() / f"{uuid.uuid4()}.png"
 
-    if backend == "flameshot":
-        # `flameshot gui` opens the interactive region-select + annotate UI and
-        # saves directly to --path when the user confirms (Enter/Save).
+    if backend.name == "flameshot":
         result = subprocess.run(
-            ["flameshot", "gui", "--path", str(dest)],
-            capture_output=True,
-            text=True,
+            ["flameshot", "gui", "--path", str(dest)], capture_output=True, text=True
         )
         if result.returncode != 0:
             raise CaptureError(f"flameshot exited with {result.returncode}: {result.stderr}")
-    elif backend == "satty":
-        # satty annotates a screenshot it's given; pair it with grim on Wayland
-        # for the actual grab, falling back to asking the user to pipe one in.
-        if not shutil.which("grim"):
-            raise CaptureError(
-                "satty backend requires 'grim' to grab the screenshot first "
-                "(e.g. `sudo apt install grim`)."
-            )
+    elif backend.name == "satty":
         raw = images_dir() / f"{uuid.uuid4()}-raw.png"
         subprocess.run(["grim", str(raw)], check=True)
         result = subprocess.run(
@@ -56,8 +55,13 @@ def capture_screenshot() -> Path:
         raw.unlink(missing_ok=True)
         if result.returncode != 0:
             raise CaptureError(f"satty exited with {result.returncode}: {result.stderr}")
-    else:  # pragma: no cover - guarded by _detect_backend
-        raise CaptureError(f"Unknown backend: {backend}")
+    elif backend.name == "screencapture":
+        # -i interactive region/window selection (space toggles window mode)
+        result = subprocess.run(["screencapture", "-i", str(dest)], capture_output=True, text=True)
+        if result.returncode != 0:
+            raise CaptureError(f"screencapture exited with {result.returncode}: {result.stderr}")
+    else:  # pragma: no cover
+        raise CaptureError(f"Unknown backend: {backend.name}")
 
     if not dest.exists():
         raise CaptureError(
