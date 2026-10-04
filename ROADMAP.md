@@ -23,3 +23,18 @@ Items are in priority order. Status: `[x]` done, `[~]` started (partial code, no
       Contents API. The repo-committed copy is kept; an S3/R2 store (6) is an optional extra,
       not a replacement.
 - [ ] 9. Additional trackers (Linear, Jira, Trello) behind the same adapter interface *(deferred)*
+
+## Backlog (unprioritized)
+
+- [ ] **Associate existing images to a bug**: from a local file, a path, or a URL (downloaded into
+      the store), on `capture`, `attach`, or later via `bugcap attach <id> --image <path|url>`
+- [ ] **Reference specific images from the notes with `@`**: e.g. `@1` or `@login-error` in notes
+      resolves to that report's image (images get a stable index and optional label); validated on
+      save, rendered inline in `show`, the dashboard and synced issues
+- [ ] **Screen recording for complex bugs**: record the screen and store the result, by user
+      choice, as either a video (mp4/webm) or a short burst of frames / animated image
+      (GIF/APNG/WebP) for more efficient storage. Needs a per-OS recorder backend (detect/install
+      like capture backends) and a size/duration cap
+- [ ] **Dashboard (web app)**: `bugcap dashboard` starts a local web UI to browse, filter (repo,
+      tag, status) and open bugs with their images/recordings and `@` references; local-only by
+      default (binds to 127.0.0.1)
