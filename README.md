@@ -24,88 +24,151 @@ issue text but never the picture — exactly the thing that usually explains the
    any other service being reachable or even chosen yet.
 3. **Hand to any agent**: because the store is just local files, any agent with filesystem access
    (Claude Code, Cursor, etc.) can read a report's screenshot directly — no CDN, no auth dance. A
-   read-only MCP server (planned, see Roadmap) exposes the same store to agents that aren't
-   running on the same filesystem context.
+   stdio MCP server (`bugcap mcp-serve`) exposes the same store to agents, including the image
+   bytes.
 4. **Sync when ready**: push a report to a real tracker on your own schedule. The GitHub adapter
-   (planned, see Roadmap) both attaches the image the normal way (so humans get the usual inline
-   image in their browser) **and** commits a plain copy of the file into the repo, so any agent —
-   yours or a teammate's — can read the same bytes back via `gh api repos/<owner>/<repo>/contents/
-   <path>`, sidestepping the CDN's browser-only restriction entirely.
+   both attaches the image the normal way (so humans get the usual inline image in their browser)
+   **and** commits a plain copy of the file into a repo you choose, so any agent — yours or a
+   teammate's — can read the same bytes back via `gh api repos/<owner>/<repo>/contents/<path>`,
+   sidestepping the CDN's browser-only restriction entirely.
 
 The result: one capture step, a durable local record, and a sync step that's a deliberate choice
 rather than a one-way trip into a format your tools can't see.
 
 ## Status
 
-Early scaffold. Implemented so far: capture, local SQLite-backed store, and a CLI
-(`capture` / `list` / `show`). Sync adapters and the MCP server are designed but not yet built —
-see [Roadmap](#roadmap).
+Working. Roadmap items 1–5, 7 and 8 are implemented and tested (cross-OS paths, `setup`, per-repo
+`init`, scoped capture/list, triage, GitHub pull/attach, GitHub push/sync, and the MCP server).
+Items 6 (S3/R2 object store) and 9 (other trackers) are deferred, but the `Destination` seam is in
+place so they slot in without touching existing commands.
 
 ## Installation
 
-Requires Python >= 3.10 and a capture backend installed on your system:
-
-- Linux (Wayland): [`satty`](https://github.com/Satty-org/Satty)
-- Linux (X11) / cross-platform: [`flameshot`](https://flameshot.org/)
+Requires Python >= 3.10. The core CLI is standard-library only (plus `tomli` on Python < 3.11);
+the MCP server is an optional extra.
 
 ```bash
-pipx install .
-# or, for local development:
-pip install -e .
+# System-wide (recommended):
+pipx install .            # core CLI
+pipx install '.[mcp]'     # core CLI + MCP server
+# or with uv:
+uv tool install '.[mcp]'
+# for local development:
+pip install -e '.[dev,mcp]'
 ```
 
-`bugcap` auto-detects whichever backend (`satty` or `flameshot`) is on your `PATH`; if both are
-present, `flameshot` is preferred for its built-in save-to-path behavior.
+Then make sure a capture tool is available for your OS:
+
+```bash
+bugcap setup              # reports the detected tool, or recommends one
+bugcap setup --yes        # also installs it via your package manager (no prompt)
+```
+
+Supported capture backends: [`flameshot`](https://flameshot.org/) (cross-platform, recommended),
+[`satty`](https://github.com/Satty-org/Satty) + `grim` (Linux/Wayland), and `screencapture`
+(macOS built-in). If no tool is available you can always import an existing image with
+`bugcap capture --image PATH`.
 
 ## Usage
 
 ```bash
-# Capture a screenshot, annotate it in the backend's UI, then describe the bug.
+# One-time, inside a project repo: scope captures to this repo (tag + GitHub slug auto-detected).
+bugcap init                         # or: bugcap init --tag myproj --github owner/repo
+bugcap init --images-repo owner/assets   # optionally pin where synced image copies are committed
+
+# Capture (or import) a screenshot, annotate it, then describe the bug.
 bugcap capture --title "Dashboard empty after module creation" \
                 --note "Created Activity Tracking module, dashboard shows no widgets" \
-                --tag ui --tag dashboard
+                --tag ui
+bugcap capture --image ./shot.png --title "Broken" --note "no capture tool needed"
 
-# List all local reports.
+# List reports (current repo only inside an initialized repo; everything with --all) and show one.
 bugcap list
-
-# Show one report's full detail (metadata + resolved image paths).
+bugcap list --all
 bugcap show <id>
+
+# Triage after capture, without re-shooting.
+bugcap edit <id> --status resolved --note "fixed in #42"
+bugcap tag <id> add ui
+bugcap tag <id> remove ui
+
+# GitHub: pull issues in as reports (idempotent), optionally asking to add a screenshot per issue.
+bugcap github pull --repo owner/repo --label bug --limit 20 --ask
+bugcap attach <id> --image ./shot.png      # add an image to any report
+
+# GitHub: push a report — create/comment an issue AND commit a plain image copy agents can read.
+bugcap sync <id> --to github --images-repo owner/assets --yes
+
+# Run the MCP server (needs the 'mcp' extra) so coding agents can read/request reports.
+bugcap mcp-serve
 ```
 
-Reports are stored under `$XDG_DATA_HOME/bugcap` (default `~/.local/share/bugcap`):
+Statuses accepted by `edit --status`: `open`, `in-progress`, `resolved`, `closed`, `wontfix`
+(free-text values from older databases are tolerated on read).
 
-```
-~/.local/share/bugcap/
-├── bugcap.db          # SQLite index: metadata, tags, status, sync refs
-└── images/
-    └── <uuid>.png      # one file per captured screenshot
+### Where data lives (per-OS)
+
+| Platform | Data (`bugcap.db`, `images/`) | Config (`config.toml`) |
+|---|---|---|
+| Linux | `$XDG_DATA_HOME/bugcap` (default `~/.local/share/bugcap`) | `$XDG_CONFIG_HOME/bugcap` (default `~/.config/bugcap`) |
+| macOS | `~/Library/Application Support/bugcap` | same as data |
+| Windows | `%LOCALAPPDATA%\bugcap` | `%APPDATA%\bugcap` |
+
+Set `BUGCAP_HOME` to override both (`$BUGCAP_HOME/data` and `$BUGCAP_HOME/config`). The historic
+Linux location is unchanged, so existing databases keep working; they are migrated in place
+(a `repo` and `body` column are added) with no data loss.
+
+### Using it from Claude Code (MCP)
+
+Requires the extra (`pipx install 'bugcap[mcp]'` or `uv tool install 'bugcap[mcp]'`):
+
+```bash
+claude mcp add bugcap -- bugcap mcp-serve
 ```
 
-Nothing here talks to a tracker yet — this is intentionally just the local capture + store layer.
+or in `.mcp.json`:
+
+```json
+{ "mcpServers": { "bugcap": { "command": "bugcap", "args": ["mcp-serve"] } } }
+```
+
+The server exposes four tools: `list_reports`, `get_report` (returns the image bytes as image
+content), `request_screenshot` (asks you to capture for a report or issue; returns immediately
+when there is no desktop UI), and `pull_issues`.
 
 ## Architecture
 
-```
-┌──────────────┐     ┌───────────────────┐     ┌────────────────────────┐
-│  capture.py   │ --> │   store.py (SQLite) │ --> │  cli.py (capture/list/  │
-│ (flameshot/   │     │  reports table:      │     │  show)                   │
-│  satty shell) │     │  id, created_at,     │     └────────────────────────┘
-└──────────────┘     │  image_paths, title,  │
-                       │  notes, tags, status, │     ┌────────────────────────┐
-                       │  synced_refs (JSON)   │ <-- │  (planned) mcp_server.py │
-                       └───────────────────┘     │  read-only MCP over the  │
-                                                     │  same store              │
-                                                     └────────────────────────┘
-                                                     ┌────────────────────────┐
-                                                     │  (planned) sync/github.py│
-                                                     │  gh issue create --attach │
-                                                     │  + commit raw copy        │
-                                                     └────────────────────────┘
-```
+Module map (`src/bugcap/`):
 
-The store is the one shared surface. Capture writes to it; the CLI reads/writes it; the (planned)
-MCP server and sync adapters only ever read/update it too — nothing talks directly to a tracker
-except the sync layer, and nothing requires a tracker to exist at all for capture to be useful.
+| Module | Responsibility |
+|---|---|
+| `paths.py` | Per-OS data/config dirs; `BUGCAP_HOME` override. |
+| `capture.py` | Import or capture images (`flameshot`/`satty`+`grim`/`screencapture`); `has_display()`. |
+| `backends.py` | Capture-tool detection, per-OS install commands, manual guidance. |
+| `store.py` | SQLite store (`reports`), `PRAGMA user_version` migrations, report API. |
+| `repo.py` + `tomlio.py` | `.bugcap.toml` discovery/read/write (tag, github slug, `[sync]`). |
+| `config.py` | Global `config.toml`: `[sync]` defaults and `[consent]` for image commits. |
+| `ghcli.py` | Thin `gh` wrapper (argv lists; large payloads via stdin). **Transport.** |
+| `sync.py` | `Destination` protocol, `GitHubDestination`, `pull_issues`, `sync_report`. **Policy.** |
+| `agent_api.py` | SDK-free tool logic (`list_reports`/`get_report`/`request_screenshot`/`pull_issues`). |
+| `mcp_server.py` | Lazy-imports the `mcp` SDK; registers the four `agent_api` tools over stdio. |
+| `cli.py` | All subcommands. |
+
+The **store is the one shared surface**. Capture writes to it; the CLI, the MCP server, and the
+sync layer only read/update it — nothing talks to a tracker except `sync.py` (via `ghcli.py`), and
+nothing requires a tracker to exist for capture to be useful.
+
+**Extension seam (roadmap 6 & 9):** `sync.py` depends only on the small `Destination` protocol
+(`ensure_ready`, `repo_visibility`, `get_file`, `put_file`, `create_issue`, `comment`,
+`supports_attach`) and on the report's `synced_refs`. A future object store or tracker implements
+that protocol — the CLI and store don't change. Refs are namespaced per destination:
+
+- `github.issue` → `owner/repo#N`
+- `github.comment_hash` → sha256 of the last synced content (so re-sync comments only on change)
+- `github.image.<basename>` → `owner/repo:path@commit` (so each image is committed at most once)
+
+These refs also make pull and sync **idempotent and resumable**: each step is persisted as it
+succeeds, so a re-run skips what is already recorded.
 
 ## Roadmap
 

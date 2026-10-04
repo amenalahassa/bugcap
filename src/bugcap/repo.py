@@ -1,4 +1,6 @@
 """Per-repo setup: `bugcap init` writes .bugcap.toml so captures there get a tag + GitHub slug."""
+from __future__ import annotations
+
 import re
 import subprocess
 from dataclasses import dataclass
@@ -10,11 +12,18 @@ from . import tomlio
 CONFIG_NAME = ".bugcap.toml"
 
 
+class RepoConfigError(RuntimeError):
+    pass
+
+
 @dataclass
 class RepoConfig:
     root: Path
     tag: str
     github: Optional[str] = None  # "owner/repo"
+    images_repo: Optional[str] = None  # [sync] owner/repo for committed image copies
+    images_path: Optional[str] = None  # [sync] directory within images_repo
+    images_branch: Optional[str] = None  # [sync] branch within images_repo
 
     @property
     def key(self) -> str:
@@ -58,19 +67,52 @@ def load_repo_config(start: Optional[Path] = None) -> Optional[RepoConfig]:
     if not path:
         return None
     data = tomlio.load(path)
+    sync = data.get("sync") or {}
     return RepoConfig(
-        root=path.parent, tag=data.get("tag") or path.parent.name, github=data.get("github")
+        root=path.parent,
+        tag=data.get("tag") or path.parent.name,
+        github=data.get("github"),
+        images_repo=sync.get("images_repo"),
+        images_path=sync.get("images_path"),
+        images_branch=sync.get("images_branch"),
     )
 
 
 def init_repo(
-    root: Path, tag: Optional[str] = None, github: Optional[str] = None
+    root: Path,
+    tag: Optional[str] = None,
+    github: Optional[str] = None,
+    images_repo: Optional[str] = None,
+    images_path: Optional[str] = None,
+    images_branch: Optional[str] = None,
+    force: bool = False,
 ) -> RepoConfig:
+    target = root / CONFIG_NAME
+    if target.exists() and not force:
+        raise RepoConfigError(
+            f"{CONFIG_NAME} already exists in {root}. Use --force to overwrite."
+        )
     cfg = RepoConfig(
-        root=root, tag=tag or root.name, github=github or detect_github_slug(root)
+        root=root,
+        tag=tag or root.name,
+        github=github or detect_github_slug(root),
+        images_repo=images_repo,
+        images_path=images_path,
+        images_branch=images_branch,
     )
-    data = {"tag": cfg.tag}
+    data: dict = {"tag": cfg.tag}
     if cfg.github:
         data["github"] = cfg.github
-    tomlio.save(root / CONFIG_NAME, data)
+    sync = {
+        k: v
+        for k, v in (
+            ("images_repo", cfg.images_repo),
+            ("images_path", cfg.images_path),
+            ("images_branch", cfg.images_branch),
+        )
+        if v
+    }
+    if sync:
+        data["sync"] = sync
+    tomlio.save(target, data)
     return cfg

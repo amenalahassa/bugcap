@@ -101,9 +101,8 @@ def detect() -> Optional[Backend]:
 
 
 def recommended() -> Backend:
-    """What to suggest installing on this OS."""
-    if platform_key() == "linux" and os.environ.get("XDG_SESSION_TYPE") == "wayland":
-        return by_name("flameshot")  # works on most compositors; satty is the alternative
+    """What to suggest installing on this OS. Flameshot is cross-platform and annotates,
+    so it is the recommendation on every supported OS (satty is the Wayland alternative)."""
     return by_name("flameshot")
 
 

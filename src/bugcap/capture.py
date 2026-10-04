@@ -1,5 +1,7 @@
+import os
 import shutil
 import subprocess
+import sys
 import uuid
 from pathlib import Path
 
@@ -9,6 +11,17 @@ from .paths import images_dir
 
 class CaptureError(RuntimeError):
     pass
+
+
+def has_display() -> bool:
+    """Whether an interactive graphical session is available for a capture UI.
+
+    Linux: a running X11/Wayland session (``DISPLAY`` or ``WAYLAND_DISPLAY``).
+    macOS/Windows: assumed present (the window server runs for logged-in users).
+    """
+    if sys.platform == "win32" or sys.platform == "darwin":
+        return True
+    return bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
 
 
 def _no_backend_error() -> CaptureError:

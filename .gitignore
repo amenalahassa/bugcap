@@ -6,3 +6,9 @@ dist/
 build/
 *.egg-info/
 .pytest_cache/
+.env
+.env.*
+*.log
+.DS_Store
+.vscode/
+.idea/

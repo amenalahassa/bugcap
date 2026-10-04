@@ -36,3 +36,35 @@ def unset(key: str) -> None:
     data = load()
     data.get(section, {}).pop(name, None)
     tomlio.save(config_path(), data)
+
+
+# --- sync defaults and image-commit consent (roadmap item 8) -----------------
+
+def get_sync_defaults() -> dict[str, str]:
+    """Global `[sync]` defaults: images_repo, images_path, images_branch."""
+    section = load().get("sync", {})
+    return {
+        k: section[k]
+        for k in ("images_repo", "images_path", "images_branch")
+        if section.get(k)
+    }
+
+
+def _consent_set() -> list[str]:
+    raw = load().get("consent", {}).get("images_repos", "")
+    return [s.strip() for s in str(raw).split(",") if s.strip()]
+
+
+def consent_has(slug: str) -> bool:
+    """Whether the user has already approved committing images to this (private) repo."""
+    return slug in _consent_set()
+
+
+def consent_add(slug: str) -> None:
+    """Remember approval to commit images to a private repo (comma-separated, flat key)."""
+    repos = _consent_set()
+    if slug not in repos:
+        repos.append(slug)
+    data = load()
+    data.setdefault("consent", {})["images_repos"] = ",".join(repos)
+    tomlio.save(config_path(), data)
