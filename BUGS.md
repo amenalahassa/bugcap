@@ -19,3 +19,15 @@ crashes are invisible to the user.
 **Expected:** log to a file (and/or stderr, never stdout, which carries the MCP protocol) with a
 configurable level: startup, client initialize, each tool call with its outcome and duration, and
 errors with tracebacks. Default log location in the per-user data dir; document it in the README.
+
+## Capturing a new image for an already-reported bug can't carry a note
+
+`bugcap attach <id>` already captures (or imports with `--image`) a screenshot onto an existing
+report, but it takes no text: there is no way to say what the new image shows. The only workaround
+is a separate `bugcap edit` afterwards, which loses the link between the note and the image.
+
+**Expected:** `bugcap attach <id> [--note TEXT]` appends the note to the report's existing notes
+(never replaces them), tied to the image it was added with (timestamped, and referenceable once
+`@` image references exist). Without `--note` on an interactive terminal, prompt for an optional
+note after the capture, as `capture` does. The same applies to the MCP `request_screenshot` tool
+(optional note argument) and to the `--ask` flow of `github pull`.
