@@ -79,3 +79,12 @@ def test_no_package_manager_prints_guidance(monkeypatch, record_run, capsys):
     assert cli.main(["setup"]) == 1
     assert "manually" in capsys.readouterr().err.lower()
     assert record_run == []
+
+
+def test_version_flag(capsys):
+    from bugcap import __version__
+
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["--version"])
+    assert exc.value.code == 0
+    assert capsys.readouterr().out.strip() == f"bugcap {__version__}"

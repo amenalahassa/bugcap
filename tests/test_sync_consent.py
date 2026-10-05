@@ -1,8 +1,5 @@
 """T031: image-commit consent rules (FR-018a) and images-target resolution (FR-018b/R2)."""
-import base64
 import json
-
-import pytest
 
 from bugcap import config, repo, sync
 from bugcap.store import Store

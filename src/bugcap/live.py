@@ -85,7 +85,7 @@ class _App:
 
     def style(self) -> None:
         """One consistent look for every window: a flat light theme with an accent button."""
-        tk, ttk = self.tk, self.ttk
+        ttk = self.ttk
         import tkinter.font as tkfont
 
         base = tkfont.nametofont("TkDefaultFont")

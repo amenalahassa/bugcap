@@ -1,7 +1,7 @@
 """T016: init writes config; capture scopes inside a repo; list filters; --all; legacy rows."""
-import pytest
 
 from fixtures.make_images import png_bytes
+
 from bugcap import cli, repo
 from bugcap.store import Store
 

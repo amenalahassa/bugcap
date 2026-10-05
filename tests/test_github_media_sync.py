@@ -2,10 +2,11 @@
 import base64
 import json
 
+from fixtures.make_images import png_bytes
+
 from bugcap import service, sync
 from bugcap.store import Store
 from bugcap.sync import GitHubDestination, ImagesTarget, SyncOptions
-from fixtures.make_images import png_bytes
 
 
 def _setup(fake_gh):

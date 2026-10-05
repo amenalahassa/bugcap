@@ -13,7 +13,7 @@ labels: bug
 2.
 
 **Environment**
-- bugcap version (`pipx list` / `uv tool list` / `pip show bugcap`):
+- bugcap version (`bugcap --version`):
 - Install method (pipx / uv / pip):
 - OS and Python version:
 - Capture tool / recorder (flameshot, satty, ffmpeg, ...):

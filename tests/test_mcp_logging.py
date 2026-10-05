@@ -1,6 +1,5 @@
 """BUGS.md: `bugcap mcp-serve` logs startup, client initialize, tool calls and errors, never to stdout."""
 import asyncio
-import io
 import logging
 import os
 import subprocess

@@ -4,7 +4,6 @@ import pytest
 from bugcap import cli, ghcli, repo, validation
 from bugcap.store import Store
 
-
 # --- validation -------------------------------------------------------------------
 
 @pytest.mark.parametrize("slug", ["owner/repo", "my-org/my.repo_1", "a/b"])

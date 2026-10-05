@@ -3,8 +3,8 @@ import subprocess
 import sys
 import threading
 import time
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from dataclasses import dataclass, field
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -16,6 +16,8 @@ def bugcap_home(tmp_path, monkeypatch):
     """Point bugcap's data/config at a temp dir and clear XDG/platform env leakage."""
     home = tmp_path / "bugcap_home"
     monkeypatch.setenv("BUGCAP_HOME", str(home))
+    # Don't pick up a .bugcap.toml from wherever pytest was started.
+    monkeypatch.chdir(tmp_path)
     for var in ("XDG_DATA_HOME", "XDG_CONFIG_HOME", "XDG_SESSION_TYPE", "LOCALAPPDATA", "APPDATA"):
         monkeypatch.delenv(var, raising=False)
     return home

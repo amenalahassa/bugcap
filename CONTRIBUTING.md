@@ -9,7 +9,7 @@ go through [SECURITY.md](SECURITY.md), not public issues.
 ## Ways to contribute
 
 - **Report a bug.** Use the *Bug report* issue template. Include your OS, Python version,
-  the bugcap version (`pipx list`, `uv tool list` or `pip show bugcap`), the exact command, and the output. Redact anything private from logs and
+  `bugcap --version`, the exact command, and the output. Redact anything private from logs and
   screenshots.
 - **Suggest a feature.** Open an issue first and describe the problem you want solved, not just
   the solution. Check [ROADMAP.md](ROADMAP.md) to see whether it is planned or a deliberate
@@ -96,8 +96,14 @@ These come from how bugcap is built. Pull requests that break them will be asked
 
 ## Code style
 
-There is no formatter config yet, so match the surrounding code: type hints on public functions,
-small functions, naming and comment density like the file you are editing. Comment *why*, not
+Linting is [ruff](https://docs.astral.sh/ruff/), configured in `pyproject.toml` and enforced in CI:
+
+```bash
+uv run --extra dev ruff check src tests          # add --fix for the safe fixes
+```
+
+Beyond that, match the surrounding code: type hints on public functions, small functions, naming
+and comment density like the file you are editing. Comment *why*, not
 *what*. Don't reformat code you aren't changing, because it hides the real diff.
 
 ## Documentation
@@ -108,7 +114,7 @@ request. Keep README links and image URLs absolute so they render on PyPI.
 ## Pull request checklist
 
 - [ ] The change is focused and linked to an issue (for anything non-trivial)
-- [ ] Tests added or updated, and the full suite passes
+- [ ] Tests added or updated, the full suite passes and `ruff check` is clean
 - [ ] No new dependency in the core CLI
 - [ ] Docs and `CHANGELOG.md` updated
 - [ ] No secrets, tokens, personal paths or private screenshots in code, tests or fixtures

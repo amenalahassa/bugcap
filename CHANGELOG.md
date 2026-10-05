@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- `bugcap --version`.
+- Contributing guide, code of conduct, security policy, and issue and pull request templates.
+- ruff linting (`[tool.ruff]` in `pyproject.toml`), run in CI; `ruff` joins the `dev` extra.
+
+### Fixed
+- The README uses absolute image and file links so the logo and demo render on PyPI.
+
 ## 0.5.0 - 2026-10-05
 
 ### Added

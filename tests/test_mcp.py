@@ -17,7 +17,6 @@ EXPECTED_TOOLS = {
 
 
 def _seed_report(home) -> int:
-    env = dict(os.environ, BUGCAP_HOME=str(home))
     os.environ["BUGCAP_HOME"] = str(home)
     from bugcap.store import Store
 

@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from bugcap import config, sync
+from bugcap import sync
 from bugcap.store import Store
 from bugcap.sync import GitHubDestination, ImagesTarget, SyncOptions
 

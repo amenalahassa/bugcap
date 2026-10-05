@@ -1,8 +1,8 @@
 import pytest
+from fixtures.make_images import gif_bytes, jpeg_bytes, png_bytes, webp_bytes
 
 from bugcap import ingest
 from bugcap.errors import ServiceError
-from fixtures.make_images import gif_bytes, jpeg_bytes, png_bytes, webp_bytes
 
 
 def test_classify_sources(tmp_path):

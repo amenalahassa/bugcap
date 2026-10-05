@@ -1,7 +1,7 @@
 """T026: `bugcap attach`."""
 import pytest
-
 from fixtures.make_images import png_bytes
+
 from bugcap import backends, capture, cli
 from bugcap.store import Store
 

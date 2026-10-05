@@ -7,12 +7,11 @@ import threading
 from pathlib import Path
 from typing import Optional
 
-from . import backends, capture, config, ghcli, recorder, refs, repo, service, sync, validation
+from . import __version__, backends, capture, config, ghcli, recorder, refs, repo, service, sync, validation
 from .capture import CaptureError
 from .errors import ServiceError
 from .ghcli import GhError
 from .store import STATUSES, Store
-
 
 # --- shared helpers (T014) ----------------------------------------------------
 
@@ -161,7 +160,7 @@ def print_report(report) -> None:
         print(f"  repo:       {report.repo}")
     print(f"  tags:       {', '.join(report.tags) or '(none)'}")
     print(f"  notes:      {refs.display_notes(report.notes, report.media) or '(none)'}")
-    print(f"  images:")
+    print("  images:")
     for path in report.image_paths:
         print(f"    - {path}")
     detailed = [m for m in report.media if not (m.kind == "image" and m.source == "legacy")]
@@ -171,7 +170,7 @@ def print_report(report) -> None:
             where = m.path or f"({len(m.frames)} frames)"
             origin = f"  (source: {m.source})" if m.source else ""
             print(f"    {refs.media_token(m)}  {m.kind:8s} {m.label or '-':12s} {where}  {human_size(m.size_bytes)}{origin}")
-    print(f"  synced_refs:")
+    print("  synced_refs:")
     if report.synced_refs:
         for tracker, ref in report.synced_refs.items():
             print(f"    - {tracker}: {ref}")
@@ -850,6 +849,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="bugcap",
         description="Local-first, agent-readable bug capture: annotated screenshots + notes.",
     )
+    parser.add_argument("--version", action="version", version=f"bugcap {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("setup", help="Detect a capture tool, or recommend/install one.")

@@ -1,8 +1,8 @@
-import pytest
+
+from fixtures.make_v1_db import build
 
 from bugcap import capture, cli
 from bugcap.store import Store
-from fixtures.make_v1_db import build
 
 
 def _boom(*a, **k):

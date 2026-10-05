@@ -1,13 +1,13 @@
 from pathlib import Path
 
 import pytest
+from fixtures.make_images import png_bytes
 
 from bugcap import drafts, live_session, recorder
 from bugcap.errors import ServiceError
 from bugcap.live_session import LiveSession, LiveState
 from bugcap.paths import images_dir, media_dir
 from bugcap.store import Store
-from fixtures.make_images import png_bytes
 
 
 class Cfg:

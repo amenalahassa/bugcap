@@ -1,7 +1,8 @@
 import json
 
-from bugcap import drafts
 from fixtures.make_images import png_bytes
+
+from bugcap import drafts
 
 
 def _png(tmp_path, name="s.png"):

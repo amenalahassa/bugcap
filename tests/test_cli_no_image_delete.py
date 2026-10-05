@@ -1,7 +1,7 @@
 """`capture --no-image` saves a text-only report; `delete` removes a report and its files."""
-import pytest
 
 from fixtures.make_images import png_bytes
+
 from bugcap import cli, service
 from bugcap.paths import resolve_data_path
 from bugcap.store import Store

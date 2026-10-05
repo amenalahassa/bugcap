@@ -12,7 +12,7 @@ uv tool install --editable '.[mcp]' # editable: source changes take effect witho
 Optional extras are installed with `'.[extra]'`. Defined in `pyproject.toml`:
 
 - `mcp`: the official MCP SDK, needed for `bugcap mcp-serve` (`uv tool install '.[mcp]'`)
-- `dev`: pytest, for running the tests
+- `dev`: pytest and ruff, for running the tests and the linter
 
 An extra that isn't defined in `pyproject.toml` is ignored with a warning.
 
@@ -24,6 +24,14 @@ uv run --extra dev --with pytest pytest -q
 
 Use `uv run` rather than bare `python3`: dependencies such as `tomli` (Python < 3.11) are only
 installed in uv's environment.
+
+## Linting
+
+```bash
+uv run --extra dev ruff check src tests
+```
+
+Rules are in `pyproject.toml` (`[tool.ruff]`); CI runs the same check.
 
 ## Upgrading to a new version
 

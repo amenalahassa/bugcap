@@ -21,7 +21,7 @@ def test_missing_tkinter_exits_3_with_install_hint(monkeypatch, capsys):
 
 
 def test_unreachable_display_exits_3(monkeypatch, capsys):
-    tk = pytest.importorskip("tkinter")
+    pytest.importorskip("tkinter")
     monkeypatch.setenv("DISPLAY", ":99999")
     assert cli.main(["live"]) == 3
     assert "cannot open a window" in capsys.readouterr().err

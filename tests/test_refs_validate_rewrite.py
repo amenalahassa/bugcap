@@ -2,7 +2,9 @@ import pytest
 
 from bugcap.errors import ServiceError
 from bugcap.refs import (
-    display_notes, rewrite_references, validate_references,
+    display_notes,
+    rewrite_references,
+    validate_references,
 )
 from bugcap.store import Media
 

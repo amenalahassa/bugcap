@@ -2,9 +2,9 @@
 
 The expected strings below are the exact pre-feature formats; the test fails if any
 scoping/repo change leaks into output when there is no .bugcap.toml in scope."""
-import pytest
 
 from fixtures.make_images import png_bytes
+
 from bugcap import cli
 from bugcap.store import Store
 

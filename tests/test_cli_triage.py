@@ -1,5 +1,4 @@
 """T022: `bugcap edit` and `bugcap tag`."""
-import pytest
 
 from bugcap import cli
 from bugcap.store import Store

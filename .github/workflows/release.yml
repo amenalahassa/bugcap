@@ -18,6 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
+      - run: uv run --python ${{ matrix.python-version }} --extra dev ruff check src tests
       - run: uv run --python ${{ matrix.python-version }} --extra dev --extra mcp pytest -q
 
   publish:

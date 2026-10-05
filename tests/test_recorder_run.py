@@ -156,7 +156,6 @@ def test_animated_runs_postprocess_and_removes_raw(env, tmp_path):
 
 
 def test_frames_result(env, tmp_path):
-    frames_dir_files = []
 
     def runner(argv, **kw):
         pattern = argv[-1]
