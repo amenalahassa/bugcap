@@ -25,7 +25,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/demo.gif" alt="bugcap capturing an annotated bug and listing the report" width="760">
+  <img src="docs/assets/demo.gif" alt="bugcap live: screenshot a broken page, file a bug with a note, then read it back with bugcap show" width="760">
 </p>
 
 ---
