@@ -134,6 +134,10 @@ Notes on the more involved behaviour:
 - **Repo values** (`init`, `sync`, `config repo set`) are checked for format and, with `gh`, for existence. Changing the repo identity offers to move existing reports.
 - **Media sync** over `[sync] max_upload_mb` (default 25) is skipped with a warning.
 
+## Contributing
+
+Contributions are welcome. Read [CONTRIBUTING.md](https://github.com/amenalahassa/bugcap/blob/master/CONTRIBUTING.md) for the workflow and project rules, and the [Code of Conduct](https://github.com/amenalahassa/bugcap/blob/master/CODE_OF_CONDUCT.md). Report security issues privately, see [SECURITY.md](https://github.com/amenalahassa/bugcap/blob/master/SECURITY.md).
+
 ## Development
 
 See [DEVELOPMENT.md](https://github.com/amenalahassa/bugcap/blob/master/DEVELOPMENT.md). Run the tests with:
