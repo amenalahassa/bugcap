@@ -1,14 +1,18 @@
 # Changelog
 
-## Unreleased
+## 0.5.1 - 2026-10-05
 
 ### Added
 - `bugcap --version`.
 - Contributing guide, code of conduct, security policy, and issue and pull request templates.
 - ruff linting (`[tool.ruff]` in `pyproject.toml`), run in CI; `ruff` joins the `dev` extra.
 
+### Changed
+- CI tests Python 3.10 to 3.13 on Linux, plus macOS and Windows, with ruff linting and a job timeout.
+
 ### Fixed
 - The README uses absolute image and file links so the logo and demo render on PyPI.
+- Tests no longer depend on the working directory, on `/` path separators, or on a display (one test hung on Windows and macOS).
 
 ## 0.5.0 - 2026-10-05
 
