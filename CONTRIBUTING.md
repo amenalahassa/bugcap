@@ -6,6 +6,10 @@ are welcome: bug reports, docs fixes, tests, new capture backends, and features.
 By taking part you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md). Security problems
 go through [SECURITY.md](SECURITY.md), not public issues.
 
+Maintainers aim to reply to new issues and pull requests within 1 week, and to give a fix or a
+plan for confirmed bugs within 2 weeks. This is a side project run by volunteers, so a gentle
+ping after that is fine.
+
 ## Ways to contribute
 
 - **Report a bug.** Use the *Bug report* issue template. Include your OS, Python version,

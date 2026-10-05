@@ -10,7 +10,7 @@ Please **do not open a public issue**. Report it privately with GitHub's
 [private vulnerability reporting](https://github.com/amenalahassa/bugcap/security/advisories/new).
 
 Include what you found, the version, steps to reproduce, and the impact. You can expect an
-acknowledgement within a few days and a fix or a plan as soon as it is confirmed. We'll credit you
+acknowledgement within 1 week and a fix or a plan within 2 weeks of that. We'll credit you
 in the release notes unless you prefer not to be named.
 
 ## Scope
