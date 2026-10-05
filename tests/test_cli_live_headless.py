@@ -20,6 +20,10 @@ def test_missing_tkinter_exits_3_with_install_hint(monkeypatch, capsys):
     assert "python3-tk" in capsys.readouterr().err
 
 
+@pytest.mark.skipif(
+    sys.platform in ("win32", "darwin"),
+    reason="DISPLAY only means something on X11; elsewhere Tk opens a real window and blocks",
+)
 def test_unreachable_display_exits_3(monkeypatch, capsys):
     pytest.importorskip("tkinter")
     monkeypatch.setenv("DISPLAY", ":99999")
