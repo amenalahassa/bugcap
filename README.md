@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/logo.svg" alt="bugcap" width="96">
+  <img src="https://raw.githubusercontent.com/amenalahassa/bugcap/master/docs/assets/logo.svg" alt="bugcap" width="96">
 </p>
 
 <h1 align="center">bugcap</h1>
@@ -12,7 +12,7 @@
 <p align="center">
   <a href="https://github.com/amenalahassa/bugcap/actions/workflows/release.yml"><img alt="tests" src="https://github.com/amenalahassa/bugcap/actions/workflows/release.yml/badge.svg"></a>
   <img alt="python" src="https://img.shields.io/badge/python-3.10%2B-3776ab?logo=python&logoColor=white">
-  <a href="LICENSE"><img alt="license" src="https://img.shields.io/badge/license-MIT-green"></a>
+  <a href="https://github.com/amenalahassa/bugcap/blob/master/LICENSE"><img alt="license" src="https://img.shields.io/badge/license-MIT-green"></a>
   <a href="https://amenalahassa.github.io/bugcap/"><img alt="docs" src="https://img.shields.io/badge/docs-website-d9480f"></a>
 </p>
 
@@ -21,11 +21,11 @@
   <a href="https://amenalahassa.github.io/bugcap/usage.html">Usage guide</a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="#connect-your-agent-mcp">Agents (MCP)</a> ·
-  <a href="CHANGELOG.md">Changelog</a>
+  <a href="https://github.com/amenalahassa/bugcap/blob/master/CHANGELOG.md">Changelog</a>
 </p>
 
 <p align="center">
-  <img src="docs/assets/demo.gif" alt="bugcap live: screenshot a broken page, file a bug with a note, then read it back with bugcap show" width="760">
+  <img src="https://raw.githubusercontent.com/amenalahassa/bugcap/master/docs/assets/demo.gif" alt="bugcap live: screenshot a broken page, file a bug with a note, then read it back with bugcap show" width="760">
 </p>
 
 ---
@@ -104,7 +104,7 @@ the error toast"*. It can read the picture because it's a local file, not a CDN 
 Working. Roadmap items 1–5, 7 and 8 are implemented and tested, along with spec 002 (images,
 `@` references, recording, live mode and the dashboard). S3/R2 object storage (item 6) and other
 trackers (item 9) are deferred. The `Destination` seam is in place, so they can be added without
-changing the CLI. See [ROADMAP.md](ROADMAP.md).
+changing the CLI. See [ROADMAP.md](https://github.com/amenalahassa/bugcap/blob/master/ROADMAP.md).
 
 ## Installation
 
@@ -136,7 +136,7 @@ Notes on the more involved behaviour:
 
 ## Development
 
-See [DEVELOPMENT.md](DEVELOPMENT.md). Run the tests with:
+See [DEVELOPMENT.md](https://github.com/amenalahassa/bugcap/blob/master/DEVELOPMENT.md). Run the tests with:
 
 ```bash
 uv run --extra dev --extra mcp pytest -q
@@ -187,7 +187,7 @@ succeeds, so a re-run skips what is already recorded.
 
 ## Roadmap
 
-See [ROADMAP.md](ROADMAP.md).
+See [ROADMAP.md](https://github.com/amenalahassa/bugcap/blob/master/ROADMAP.md).
 
 ## Design notes / deliberate non-goals
 
@@ -206,4 +206,4 @@ See [ROADMAP.md](ROADMAP.md).
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](https://github.com/amenalahassa/bugcap/blob/master/LICENSE).
