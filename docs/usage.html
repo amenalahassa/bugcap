@@ -95,7 +95,14 @@ bugcap images &lt;id&gt; remove 2 --force             # rewrites @ references in
     <p>Formats: <code>animated</code> (GIF), <code>video</code>, or <code>frames</code> (keyframes). Use <code>--max-seconds</code>, <code>--max-mb</code> and <code>--fps</code> to limit size. Without <code>--id</code>, the recording creates a new report.</p>
 
     <h2 id="live">Live mode: report many bugs in a row</h2>
-    <p>A small always-on-top window stays open while you test. Each capture becomes a draft you can finish later. Needs tkinter and a desktop session.</p>
+    <p>A small always-on-top window sits in the top-right corner while you test. Needs tkinter and a desktop session.</p>
+    <ul>
+      <li><strong>Screenshot</strong> and <strong>Record</strong> (then <strong>Stop</strong>) each add a capture to a staged set. Stage as many images and videos as you like, in any mix.</li>
+      <li><strong>New bug from N items</strong> turns the staged set into one report; refer to the items in the notes with <code>@i1</code>, <code>@v2</code>, and so on.</li>
+      <li><strong>Add to existing bug</strong> attaches the staged set, plus an optional note, to a bug you already filed.</li>
+      <li><strong>New bug (note only)</strong> files a bug with no media: a title, a note and optional tags.</li>
+      <li>Closing with staged captures or typed text offers to keep them as a draft, restored the next time you start live mode.</li>
+    </ul>
 <pre><code>bugcap live
 bugcap live --repo-dir ~/code/myproj        # scope reports to that repo's .bugcap.toml</code></pre>
 

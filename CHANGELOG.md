@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- `bugcap live` can record the screen (Record / Stop) as well as take screenshots. Captures are staged: take any mix of images and videos, then make one report from them.
+- `bugcap live` can add the staged captures, with an optional note, to an existing bug.
+- `bugcap live` can file a note-only bug (title, note, optional tags) with no media.
+- Live drafts keep every staged capture, or none.
+
+### Changed
+- The live window now opens in the top-right corner of the screen; its dialogs open beside it.
+
 ## 0.3.0 - 2026-10-04
 
 ### Added

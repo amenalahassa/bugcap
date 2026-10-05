@@ -47,7 +47,7 @@ bugcap keeps the whole loop in one place:
 | 🔁 **Sync when ready** | Push to a GitHub issue with the usual inline image, plus a plain copy agents can read. |
 | 🎞️ **Record what happens** | Short screen recordings as animated GIF, video or keyframes, with size caps. |
 | 🖥️ **Triage in a browser** | A local dashboard on `127.0.0.1` to browse, filter and set statuses. |
-| 🪟 **Live mode** | An always-on-top window for reporting many bugs in a row. |
+| 🪟 **Live mode** | An always-on-top window (top-right) to capture or record, stage several items, then file a new bug, add to an existing one, or log a note-only bug. |
 
 ## Quick start
 
