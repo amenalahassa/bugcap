@@ -1,5 +1,6 @@
 import signal
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -159,7 +160,7 @@ def test_frames_result(env, tmp_path):
 
     def runner(argv, **kw):
         pattern = argv[-1]
-        folder = tmp_path / pattern.split("/")[-2]
+        folder = Path(pattern).parent
         for n in (1, 2, 3):
             (folder / f"frame-00{n}.png").write_bytes(b"x")
         return subprocess.CompletedProcess(argv, 0, "", "")
@@ -167,7 +168,7 @@ def test_frames_result(env, tmp_path):
     result = recorder.run_recording("ffmpeg", "frames", 5, 30, 25, tmp_path, lambda: True,
                                     **env.kwargs(runner=runner))
     assert result.kind == "frames" and len(result.frames) == 3 and result.path is None
-    assert [p.rsplit("/", 1)[1] for p, _ in result.frames] == ["frame-001.png", "frame-002.png", "frame-003.png"]
+    assert [Path(p).name for p, _ in result.frames] == ["frame-001.png", "frame-002.png", "frame-003.png"]
 
 
 def test_macos_probes_screen_device(env, tmp_path):
