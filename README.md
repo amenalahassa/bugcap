@@ -66,6 +66,8 @@ bugcap dashboard --open                 # browse and triage in the browser
 The [usage guide](https://amenalahassa.github.io/bugcap/usage.html) covers every command: images
 and labels, recording, live mode, `@` references, GitHub pull and sync, and the MCP tools.
 
+If a report ID is not found, the error suggests `bugcap list --all` to see report IDs across all repos.
+
 ## Connect your agent (MCP)
 
 Requires the `mcp` extra. Then give your agent access to the reports:
