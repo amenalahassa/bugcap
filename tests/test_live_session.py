@@ -97,7 +97,7 @@ def test_save_combines_images_and_a_video_in_order(session):
     assert report.title == "Login broken" and report.repo == "owner/proj"
     assert report.tags == ["auth", "proj"] and report.status == "in-progress"
     assert [(m.idx, m.kind) for m in report.media] == [(1, "image"), (2, "video"), (3, "image")]
-    assert first.exists()  # captured files live on in the store, not copied away
+    assert all(Path(m.abs_path).is_file() for m in report.media)  # captured files stay in the store
 
 
 def test_two_reports_in_a_row(session):

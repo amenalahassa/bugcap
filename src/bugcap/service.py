@@ -81,6 +81,8 @@ class AddResult:
 
 def _discard(stored_files) -> None:
     for stored in stored_files:
+        if stored.reused:  # shared with other media; not ours to delete
+            continue
         try:
             stored.abs_path.unlink()
         except OSError:
@@ -158,6 +160,7 @@ def create_report(
         with store.transaction():
             report = store.add(title=title, notes="", tags=tags, repo=repo, body=body, status=status)
             if captured is not None:
+                captured = str(ingest.adopt(captured))
                 result.added.append(
                     store.insert_media(report.id, kind="image", path=captured,
                                        label=captured_label or None, source="captured")
@@ -194,7 +197,7 @@ def delete_report(store: Store, report_id: int) -> Report:
     report = _require(store, report_id)
     store.delete(report_id)
     for item in report.media:
-        _delete_files(item)
+        _delete_files(store, item)
     return report
 
 
@@ -202,6 +205,7 @@ def attach_captured(store: Store, report_id: int, path: str, label: Optional[str
     """Attach a screenshot the capture tool already saved in the store (no copy)."""
     report = _require(store, report_id)
     _check_new_labels(report.media, [label])
+    path = ingest.adopt(path)
     return store.insert_media(report_id, kind="image", path=str(path), label=label or None, source="captured")
 
 
@@ -343,14 +347,18 @@ def remove_media(store: Store, report_id: int, ref: str, force: bool = False) ->
         notes, count = refs.rewrite_references_counted(report.notes, mapping)
         if count:
             store.update(report_id, notes=notes)
-    _delete_files(item)
+    _delete_files(store, item)
     return count
 
 
-def _delete_files(item: Media) -> None:
+def _delete_files(store: Store, item: Media) -> None:
+    """Delete an item's files unless another media item still uses them (identical images
+    are stored once and shared). Call after the item's rows are gone."""
     paths = [item.path] if item.path else []
     paths += [f.path for f in item.frames]
     for rel in paths:
+        if store.path_in_use(rel):
+            continue
         try:
             os.unlink(resolve_data_path(rel))
         except (ValueError, OSError):

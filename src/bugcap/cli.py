@@ -152,12 +152,8 @@ def cmd_list(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_show(args: argparse.Namespace) -> int:
-    with Store() as store:
-        report = resolve_report(store, args.id)
-        if report is None:
-            return 1
-
+def print_report(report) -> None:
+    """The multi-line details of one report, as `bugcap show` prints them."""
     print(f"#{report.id}  {report.title}")
     print(f"  created_at: {report.created_at}")
     print(f"  status:     {report.status}")
@@ -181,6 +177,15 @@ def cmd_show(args: argparse.Namespace) -> int:
             print(f"    - {tracker}: {ref}")
     else:
         print("    (not synced to any tracker yet)")
+
+
+def cmd_show(args: argparse.Namespace) -> int:
+    with Store() as store:
+        report = resolve_report(store, args.id)
+        if report is None:
+            return 1
+
+    print_report(report)
     return 0
 
 
@@ -574,6 +579,8 @@ def cmd_attach(args: argparse.Namespace) -> int:
         print(f"Attached {shot_path} to report #{args.id}")
     elif note and added:
         print(f"Added note to report #{args.id}")
+    print()
+    print_report(current)
     return 1 if rejected or (note and not added) else 0
 
 

@@ -425,6 +425,14 @@ class Store:
         ).fetchall()
         return [self._load_media(r) for r in rows]
 
+    def path_in_use(self, path: str) -> bool:
+        """Whether any media item or frame still points at this stored file."""
+        row = self._conn.execute(
+            "SELECT EXISTS(SELECT 1 FROM media WHERE path = ?) OR EXISTS(SELECT 1 FROM media_frames WHERE path = ?)",
+            (path, path),
+        ).fetchone()
+        return bool(row[0])
+
     def get_media(self, media_id: int) -> Optional[Media]:
         row = self._conn.execute("SELECT * FROM media WHERE id = ?", (media_id,)).fetchone()
         return self._load_media(row) if row else None

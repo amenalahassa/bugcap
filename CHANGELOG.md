@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.0 - 2026-10-05
+
+### Added
+- `bugcap attach` prints the bug's details (as `bugcap show` does) after its usual output.
+
+### Changed
+- Identical images are stored once: files are named by their content, so the same image on several bugs shares one file. Images already in the store keep their old names and are not merged.
+- Removing an image or deleting a report keeps a file that another bug still uses.
+
 ## 0.4.0 - 2026-10-04
 
 ### Added

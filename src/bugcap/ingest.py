@@ -1,11 +1,13 @@
 """Bring existing images into the store: local paths, globs and http(s) URLs.
 
 Every input is validated by its magic bytes (never its extension or Content-Type), copied
-into the images directory under a fresh name (the original path is not kept), and written
-atomically. Network access is limited to plain http(s) GETs with no credentials."""
+into the images directory under a name derived from its content (the original path is not
+kept) and written atomically. The same image is therefore stored once, however many reports
+use it. Network access is limited to plain http(s) GETs with no credentials."""
 from __future__ import annotations
 
 import glob
+import hashlib
 import os
 import socket
 import urllib.error
@@ -32,6 +34,7 @@ class StoredFile:
     mime: str
     size_bytes: int
     source: str
+    reused: bool = False  # the content was already in the store; no new file was written
 
 
 @dataclass
@@ -70,16 +73,45 @@ def sniff_image(data: bytes) -> str:
     raise ServiceError("invalid_image", "not an image (PNG, JPEG, GIF or WebP expected)")
 
 
+def content_name(data: bytes, mime: str) -> str:
+    return f"{hashlib.sha256(data).hexdigest()}{_EXT[mime]}"
+
+
 def _store(data: bytes, source: str) -> StoredFile:
     mime = sniff_image(data)
-    dest = images_dir() / f"{uuid.uuid4()}{_EXT[mime]}"
-    tmp = dest.with_name(dest.name + ".part")
+    dest = images_dir() / content_name(data, mime)
+    if dest.is_file() and dest.stat().st_size == len(data):
+        return StoredFile(to_data_relative(dest), dest, mime, len(data), source, reused=True)
+    tmp = dest.with_name(f"{dest.name}.{uuid.uuid4().hex}.part")
     try:
         tmp.write_bytes(data)
         os.replace(tmp, dest)
     finally:
         tmp.unlink(missing_ok=True)
     return StoredFile(to_data_relative(dest), dest, mime, len(data), source)
+
+
+def adopt(path) -> Path:
+    """Give a screenshot the capture tool already saved in the store its content-derived
+    name. If the same image is stored already, the new copy is dropped and the existing
+    path returned. Anything that is not a recognisable image, or sits outside the store, is
+    left where it is."""
+    path = Path(path)
+    if path.parent != images_dir():
+        return path
+    try:
+        data = path.read_bytes()
+        mime = sniff_image(data)
+    except (OSError, ServiceError):
+        return path
+    dest = images_dir() / content_name(data, mime)
+    if dest == path:
+        return path
+    if dest.is_file() and dest.stat().st_size == len(data):
+        path.unlink(missing_ok=True)
+        return dest
+    os.replace(path, dest)
+    return dest
 
 
 def import_local(path: Path) -> StoredFile:

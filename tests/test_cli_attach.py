@@ -169,3 +169,77 @@ def test_pull_ask_flow_appends_note(bugcap_home, monkeypatch, tmp_path):
         sync._attach_answer(store, rid, None)
         report = store.get(rid)
     assert len(report.media) == 2 and report.notes.endswith("@i1: seen on pull")
+
+
+# --- details after attach / shared storage -----------------------------------------------
+
+def test_attach_prints_the_bug_details_after_the_usual_output(bugcap_home, tmp_path, capsys):
+    with Store() as store:
+        rid = store.add("Login fails", tags=["auth"]).id
+    img = tmp_path / "new.png"
+    img.write_bytes(png_bytes())
+    assert cli.main(["attach", str(rid), "--image", str(img), "--note", "see this"]) == 0
+    out = capsys.readouterr().out
+    assert out.index("added @i1") < out.index(f"#{rid}  Login fails")
+    assert "tags:       auth" in out and "see this" in out and "media:" in out and "i1" in out
+
+
+def test_attach_with_a_rejected_image_still_shows_the_unchanged_bug(bugcap_home, tmp_path, capsys):
+    with Store() as store:
+        rid = store.add("Bug").id
+    assert cli.main(["attach", str(rid), "--image", str(tmp_path / "missing.png")]) == 1
+    captured = capsys.readouterr()
+    assert "skipped" in captured.err and f"#{rid}  Bug" in captured.out and "media:" not in captured.out
+
+
+def test_attach_unknown_id_prints_no_details(bugcap_home, capsys):
+    assert cli.main(["attach", "999", "--image", "x.png"]) == 1
+    assert capsys.readouterr().out == ""
+
+
+def test_same_image_on_two_bugs_is_stored_once(bugcap_home, tmp_path):
+    from bugcap.paths import images_dir
+
+    with Store() as store:
+        a, b = store.add("A").id, store.add("B").id
+    img = tmp_path / "same.png"
+    img.write_bytes(png_bytes())
+    assert cli.main(["attach", str(a), "--image", str(img)]) == 0
+    assert cli.main(["attach", str(b), "--image", str(img)]) == 0
+    with Store() as store:
+        pa, pb = store.get(a).media[0].path, store.get(b).media[0].path
+    assert pa == pb and len(list(images_dir().iterdir())) == 1
+
+
+def test_shared_file_survives_until_its_last_user_is_gone(bugcap_home, tmp_path):
+    from bugcap import service
+
+    with Store() as store:
+        a, b = store.add("A").id, store.add("B").id
+    img = tmp_path / "same.png"
+    img.write_bytes(png_bytes())
+    for rid in (a, b):
+        assert cli.main(["attach", str(rid), "--image", str(img)]) == 0
+    with Store() as store:
+        path = store.get(a).media[0].abs_path
+        service.remove_media(store, a, "i1")
+        assert __import__("os").path.isfile(path)  # B still uses it
+        service.delete_report(store, b)
+    assert not __import__("os").path.exists(path)
+
+
+def test_same_image_twice_in_one_attach_and_failed_attach_keep_shared_file(bugcap_home, tmp_path):
+    from bugcap import service
+
+    with Store() as store:
+        a, b = store.add("A").id, store.add("B").id
+        img = tmp_path / "same.png"
+        img.write_bytes(png_bytes())
+        service.add_media(store, a, [str(img)])
+        # B asks for the same image with a label that cannot be used: nothing may be deleted
+        with pytest.raises(Exception):
+            service.add_media(store, b, [str(img)], labels=["i1"])
+        path = store.get(a).media[0].abs_path
+        assert __import__("os").path.isfile(path)
+        res = service.add_media(store, b, [str(img), str(img)])
+        assert len(res.added) == 2 and len({m.path for m in res.added}) == 1
