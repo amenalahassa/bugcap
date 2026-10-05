@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 - 2026-10-04
 
 ### Added
 - `bugcap live` can record the screen (Record / Stop) as well as take screenshots. Captures are staged: take any mix of images and videos, then make one report from them.
