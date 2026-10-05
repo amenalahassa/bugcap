@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 - 2026-10-04
 
 ### Added
 - `bugcap capture --no-image` saves a text-only report without launching a capture tool.
