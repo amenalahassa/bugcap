@@ -120,7 +120,8 @@ def update_notes(store: Store, id: int, notes: str) -> dict:
     except ServiceError as exc:
         return {"error": exc.message, **exc.as_dict()}
     view = service.get_report_view(store, id)
-    return {"report_id": report.id, "notes": report.notes, "references": view.references}
+    warnings = service.report_ref_warnings(store, report.notes)
+    return {"report_id": report.id, "notes": report.notes, "references": view.references, "warnings": warnings}
 
 
 def _resolve_slug(explicit: Optional[str]) -> Optional[str]:

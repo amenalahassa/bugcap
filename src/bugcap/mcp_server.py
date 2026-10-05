@@ -182,13 +182,13 @@ def build_server():
     @tool()
     def attach_image(id: int, sources: list[str], labels: Optional[list[Optional[str]]] = None) -> str:
         """Attach images (file paths, globs or http(s) URLs) to a report, with optional labels
-        (one per source, null for none). Notes can then refer to them as @1 or @label."""
+        (one per source, null for none). Notes can then refer to them as @i1 or @label."""
         with Store() as store:
             return json.dumps(agent_api.attach_image(store, id, sources, labels))
 
     @tool()
     def update_notes(id: int, notes: str) -> str:
-        """Replace a report's notes. @1 / @label references must point at the report's images."""
+        """Replace a report's notes. @i1 / @label references must point at the report's images."""
         with Store() as store:
             return json.dumps(agent_api.update_notes(store, id, notes))
 

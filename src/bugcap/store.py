@@ -356,6 +356,16 @@ class Store:
         self._commit()
         return self.get(report_id)
 
+    def delete(self, report_id: int) -> None:
+        """Remove a report with its media and frame rows (image files are the caller's job)."""
+        with self.transaction():
+            self._conn.execute(
+                "DELETE FROM media_frames WHERE media_id IN (SELECT id FROM media WHERE report_id = ?)",
+                (report_id,),
+            )
+            self._conn.execute("DELETE FROM media WHERE report_id = ?", (report_id,))
+            self._conn.execute("DELETE FROM reports WHERE id = ?", (report_id,))
+
     def add_image(self, report_id: int, path: str, source: Optional[str] = None) -> Optional[Report]:
         if self.get(report_id) is None:
             return None

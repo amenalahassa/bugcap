@@ -161,5 +161,5 @@ def test_update_notes_validates_references(bugcap_home, sample_images):
 
         bad = agent_api.update_notes(store, rid, "@3")
         assert bad["code"] == "invalid_reference" and bad["token"] == "@3"
-        assert bad["valid"] == ["@1", "@shot"]
+        assert bad["valid"] == ["@i1", "@shot"]
         assert store.get(rid).notes == "@1 and @shot"

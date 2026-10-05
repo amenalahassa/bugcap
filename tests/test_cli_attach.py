@@ -63,7 +63,7 @@ def test_attach_note_appends_and_is_tied_to_the_image(bugcap_home, tmp_path, cap
         report = store.get(rid)
     first, _, entry = report.notes.partition("\n\n")
     assert first == "original note"  # never replaced
-    assert re.fullmatch(r"\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}\] @1: after the fix", entry)
+    assert re.fullmatch(r"\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}\] @i1: after the fix", entry)
     assert "Added note" in capsys.readouterr().out
 
 
@@ -75,7 +75,7 @@ def test_attach_note_on_empty_notes_and_second_note_stacks(bugcap_home, tmp_path
         cli.main(["attach", str(rid), "--image", str(img), "--note", text])
     with Store() as store:
         lines = store.get(rid).notes.split("\n\n")
-    assert len(lines) == 2 and lines[0].endswith("@1: first") and lines[1].endswith("@2: second")
+    assert len(lines) == 2 and lines[0].endswith("@i1: first") and lines[1].endswith("@i2: second")
 
 
 def test_attach_note_references_every_added_image(bugcap_home, sample_images):
@@ -83,7 +83,7 @@ def test_attach_note_references_every_added_image(bugcap_home, sample_images):
     cli.main(["attach", str(rid), "--image", str(sample_images / "sample.png"),
               "--image", str(sample_images / "sample.gif"), "--note", "both views"])
     with Store() as store:
-        assert store.get(rid).notes.endswith("@1 @2: both views")
+        assert store.get(rid).notes.endswith("@i1 @i2: both views")
 
 
 def test_attach_note_resolves_in_show(bugcap_home, sample_images, capsys):
@@ -91,7 +91,7 @@ def test_attach_note_resolves_in_show(bugcap_home, sample_images, capsys):
     cli.main(["attach", str(rid), "--image", str(sample_images / "sample.png"), "--note", "shows it"])
     capsys.readouterr()
     cli.main(["show", str(rid)])
-    assert "@1 (images/" in capsys.readouterr().out
+    assert "@i1 (images/" in capsys.readouterr().out
 
 
 def test_attach_captured_screenshot_with_note(bugcap_home, monkeypatch, tmp_path):
@@ -101,7 +101,7 @@ def test_attach_captured_screenshot_with_note(bugcap_home, monkeypatch, tmp_path
     monkeypatch.setattr(capture, "capture_screenshot", lambda: shot)
     assert cli.main(["attach", str(rid), "--note", "from capture"]) == 0
     with Store() as store:
-        assert store.get(rid).notes.endswith("@1: from capture")
+        assert store.get(rid).notes.endswith("@i1: from capture")
 
 
 def test_attach_prompts_for_a_note_on_a_terminal(bugcap_home, sample_images, monkeypatch):
@@ -110,7 +110,7 @@ def test_attach_prompts_for_a_note_on_a_terminal(bugcap_home, sample_images, mon
     monkeypatch.setattr("builtins.input", lambda prompt="": "typed note")
     cli.main(["attach", str(rid), "--image", str(sample_images / "sample.png")])
     with Store() as store:
-        assert store.get(rid).notes.endswith("@1: typed note")
+        assert store.get(rid).notes.endswith("@i1: typed note")
 
 
 def test_attach_empty_prompt_answer_adds_no_note(bugcap_home, sample_images, monkeypatch):
@@ -156,7 +156,7 @@ def test_mcp_request_screenshot_note(bugcap_home, monkeypatch, tmp_path):
         rid = store.add("Bug", notes="before").id
         out = agent_api.request_screenshot(store, report_id=rid, note="what it shows")
         assert out["status"] == "captured" and "note_error" not in out
-        assert store.get(rid).notes.startswith("before\n\n[") and store.get(rid).notes.endswith("@1: what it shows")
+        assert store.get(rid).notes.startswith("before\n\n[") and store.get(rid).notes.endswith("@i1: what it shows")
 
 
 def test_pull_ask_flow_appends_note(bugcap_home, monkeypatch, tmp_path):
@@ -168,4 +168,4 @@ def test_pull_ask_flow_appends_note(bugcap_home, monkeypatch, tmp_path):
         sync._attach_answer(store, rid, str(shot))
         sync._attach_answer(store, rid, None)
         report = store.get(rid)
-    assert len(report.media) == 2 and report.notes.endswith("@1: seen on pull")
+    assert len(report.media) == 2 and report.notes.endswith("@i1: seen on pull")

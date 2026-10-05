@@ -14,7 +14,7 @@ def test_capture_image_creates_report_without_capture_tool(bugcap_home, sample_i
     rc = cli.main(["capture", "--image", str(sample_images / "sample.png"), "--title", "T", "--note", ""])
     out = capsys.readouterr().out
     assert rc == 0 and out.startswith("Saved report #1: T")
-    assert "added #1" in out and "(image," in out
+    assert "added @i1" in out and "(image," in out
     with Store() as store:
         assert [m.idx for m in store.get(1).media] == [1]
 
@@ -35,7 +35,7 @@ def test_capture_unknown_reference_leaves_no_report(bugcap_home, sample_images, 
     rc = cli.main(["capture", "--image", str(sample_images / "sample.png"), "--title", "T", "--note", "see @5"])
     err = capsys.readouterr().err
     assert rc == 1
-    assert "error: unknown reference @5 in notes" in err and "valid references: @1" in err
+    assert "error: unknown reference @5 in notes" in err and "valid references: @i1" in err
     with Store() as store:
         assert store.list() == []
 
@@ -56,7 +56,7 @@ def test_attach_mixed_inputs_partial_exit_1(bugcap_home, sample_images, capsys):
     ])
     cap = capsys.readouterr()
     assert rc == 1
-    assert "added #1" in cap.out and "added #2" in cap.out
+    assert "added @i1" in cap.out and "added @i2" in cap.out
     assert "skipped" in cap.err and "not-image.txt" in cap.err
     with Store() as store:
         assert len(store.get(rid).media) == 2
@@ -67,7 +67,7 @@ def test_attach_duplicate_label_error(bugcap_home, sample_images, capsys):
         rid = store.add("bug").id
     cli.main(["attach", str(rid), "--image", str(sample_images / "sample.png"), "--label", "a"])
     rc = cli.main(["attach", str(rid), "--image", str(sample_images / "sample.gif"), "--label", "a"])
-    assert rc == 1 and "duplicate label 'a' (already #1)" in capsys.readouterr().err
+    assert rc == 1 and "duplicate label 'a' (already @i1)" in capsys.readouterr().err
 
 
 def test_attach_warns_when_notes_reference_missing_label(bugcap_home, sample_images, capsys):
@@ -84,7 +84,7 @@ def test_images_lists_index_label_kind_size(bugcap_home, sample_images, capsys):
     capsys.readouterr()
     assert cli.main(["images", str(rid)]) == 0
     line = capsys.readouterr().out.strip()
-    assert line.startswith("#1") and "shot" in line and "image" in line and "images/" in line
+    assert line.startswith("@i1") and "shot" in line and "image" in line and "images/" in line
 
 
 def test_images_unknown_report(bugcap_home, capsys):
@@ -111,7 +111,7 @@ def test_edit_note_unknown_reference(bugcap_home, sample_images, capsys):
     capsys.readouterr()
     assert cli.main(["edit", str(rid), "--note", "see @3"]) == 1
     err = capsys.readouterr().err
-    assert err == "error: unknown reference @3 in notes\nvalid references: @1, @login-error\n"
+    assert err == "error: unknown reference @3 in notes\nvalid references: @i1, @login-error\n"
     assert cli.main(["edit", str(rid), "--note", "see @1 and @login-error"]) == 0
 
 
@@ -142,4 +142,4 @@ def test_show_resolves_references(bugcap_home, sample_images, capsys):
     cli.main(["show", str(rid)])
     out = capsys.readouterr().out
     assert "see @1 (images/" in out and ", @1\n" in out
-    assert "  media:" in out and "#1  image" in out
+    assert "  media:" in out and "@i1  image" in out

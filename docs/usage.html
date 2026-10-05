@@ -30,7 +30,7 @@
     <a href="#record">Record a screen</a>
     <a href="#live">Live mode</a>
     <a href="#browse">List and triage</a>
-    <a href="#refs">@ references</a>
+    <a href="#refs">references</a>
     <a href="#dashboard">Dashboard</a>
     <a href="#github">GitHub</a>
     <a href="#mcp">Agents (MCP)</a>
@@ -80,7 +80,8 @@ bugcap init --images-repo owner/assets      # where synced image copies are comm
 
     <h2 id="images">Add more images</h2>
     <p>Import existing files, globs or URLs. Each is checked by its content (PNG, JPEG, GIF or WebP) and copied into the store.</p>
-<pre><code>bugcap capture --image ./a.png --label login-error --title "Login fails" --note "See @1 and @login-error"
+<pre><code>bugcap capture --no-image --title "Typo on settings page" --note "says 'Setings'"   # text only, no screenshot
+bugcap capture --image ./a.png --label login-error --title "Login fails" --note "See @i1 and @login-error"
 bugcap attach &lt;id&gt; --image './shots/*.png' --image https://ci.example.com/run/42.png --label after-fix
 bugcap attach &lt;id&gt; --image ./after.png --note "after the fix"   # the note is timestamped and tied to the image</code></pre>
     <p>Manage a report's images:</p>
@@ -105,19 +106,25 @@ bugcap show &lt;id&gt;                    # one report, with its images and reso
 
 bugcap edit &lt;id&gt; --status resolved --note "fixed in #42"
 bugcap tag &lt;id&gt; add ui
-bugcap tag &lt;id&gt; remove ui</code></pre>
+bugcap tag &lt;id&gt; remove ui
+
+bugcap delete &lt;id&gt;                  # asks first; --yes skips the prompt (images are removed too)</code></pre>
     <p>Accepted statuses:</p>
     <p class="statuses"><span>open</span><span>in-progress</span><span>resolved</span><span>closed</span><span>wontfix</span></p>
 
-    <h2 id="refs">@ references in notes</h2>
-    <p>Point at a report's image or recording from its notes:</p>
+    <h2 id="refs">References in notes</h2>
+    <p>Point at a report's media, or at another report, from its notes:</p>
     <table>
       <tr><th>Write</th><th>Meaning</th></tr>
-      <tr><td><code>@1</code></td><td>image or recording number 1</td></tr>
-      <tr><td><code>@login-error</code></td><td>the image with that label</td></tr>
+      <tr><td><code>@i1</code></td><td>image 1</td></tr>
+      <tr><td><code>@v2</code></td><td>video 2 (from <code>record --format video</code>)</td></tr>
+      <tr><td><code>@g3</code></td><td>animated GIF 3</td></tr>
+      <tr><td><code>@f4</code></td><td>frame set 4 (from <code>record --format frames</code>)</td></tr>
+      <tr><td><code>@login-error</code></td><td>the media item with that label</td></tr>
+      <tr><td><code>#3</code></td><td>report 3 (kept as text with a warning if it does not exist)</td></tr>
       <tr><td><code>@@</code></td><td>a literal <code>@</code></td></tr>
     </table>
-    <p>References are checked when a note is saved. An unknown one is refused and the valid ones are listed. Code spans, fenced blocks and email addresses are never treated as references. <code>show</code> resolves them, and <code>sync</code> turns them into links or images in the GitHub issue.</p>
+    <p>Media references are checked when a note is saved: an unknown one is refused and the valid ones are listed. The number is the one <code>show</code> and <code>images</code> print. Older notes that use <code>@1</code> still work. Code spans, fenced blocks and email addresses are never treated as references. <code>show</code> resolves them, and <code>sync</code> turns them into links or images in the GitHub issue.</p>
 
     <h2 id="dashboard">Dashboard</h2>
     <p>A local web page to browse, filter and triage reports:</p>

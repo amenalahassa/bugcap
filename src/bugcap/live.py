@@ -22,6 +22,10 @@ TK_HINT = (
 )
 NO_DESKTOP = "Live mode needs a desktop session (no DISPLAY or WAYLAND_DISPLAY is set)."
 THUMB = 420
+# Light palette; the control and details windows share it (see `_App.style`).
+BG, CARD, TEXT, MUTED = "#f4f5f7", "#ffffff", "#111827", "#6b7280"
+ACCENT, ACCENT_ACTIVE, BORDER = "#2563eb", "#1d4ed8", "#d1d5db"
+DANGER, WARNING = "#b91c1c", "#b45309"
 
 
 def check_environment() -> tuple[int, str]:
@@ -69,25 +73,67 @@ class _App:
         self.widgets: dict = {}
         self.pending_drafts: list = []
 
+    # --- styling ---------------------------------------------------------------
+
+    def style(self) -> None:
+        """One consistent look for every window: a flat light theme with an accent button."""
+        tk, ttk = self.tk, self.ttk
+        import tkinter.font as tkfont
+
+        base = tkfont.nametofont("TkDefaultFont")
+        self.body_font = base
+        self.title_font = base.copy()
+        self.title_font.configure(size=base.cget("size") + 4, weight="bold")
+        self.heading_font = base.copy()
+        self.heading_font.configure(weight="bold")
+        self.root.configure(background=BG)
+        style = ttk.Style(self.root)
+        if "clam" in style.theme_names():
+            style.theme_use("clam")
+        style.configure(".", background=BG, foreground=TEXT, font=base)
+        style.configure("TFrame", background=BG)
+        style.configure("Card.TFrame", background=CARD, bordercolor=BORDER, relief="solid", borderwidth=1)
+        style.configure("TLabel", background=BG, foreground=TEXT)
+        style.configure("Card.TLabel", background=CARD)
+        style.configure("Title.TLabel", font=self.title_font)
+        style.configure("Heading.TLabel", font=self.heading_font)
+        style.configure("Muted.TLabel", foreground=MUTED)
+        style.configure("Muted.Card.TLabel", background=CARD, foreground=MUTED)
+        style.configure("Error.TLabel", foreground=DANGER)
+        style.configure("Warning.TLabel", foreground=WARNING)
+        style.configure("TButton", padding=(14, 6), background=CARD, bordercolor=BORDER, lightcolor=CARD,
+                        darkcolor=CARD, focuscolor=CARD)
+        style.map("TButton", background=[("active", BG), ("disabled", BG)], foreground=[("disabled", MUTED)])
+        style.configure("Accent.TButton", padding=(18, 8), background=ACCENT, foreground="#ffffff",
+                        bordercolor=ACCENT, lightcolor=ACCENT, darkcolor=ACCENT, focuscolor=ACCENT)
+        style.map("Accent.TButton", background=[("active", ACCENT_ACTIVE), ("disabled", BORDER)],
+                  foreground=[("disabled", MUTED)])
+        style.configure("TEntry", fieldbackground=CARD, bordercolor=BORDER, lightcolor=BORDER,
+                        darkcolor=BORDER, padding=4)
+        style.map("TEntry", bordercolor=[("focus", ACCENT)], lightcolor=[("focus", ACCENT)])
+        style.configure("TCombobox", fieldbackground=CARD, bordercolor=BORDER, padding=3)
+
     # --- control window --------------------------------------------------------
 
     def start_ui(self) -> None:
         tk, ttk, root = self.tk, self.ttk, self.root
         root.title("bugcap live")
         root.resizable(False, False)
+        self.style()
         notice = ""
         try:
             root.attributes("-topmost", True)
         except tk.TclError:
             notice = "Always-on-top is not supported here; the window may be hidden by others."
-        frame = ttk.Frame(root, padding=12)
+        frame = ttk.Frame(root, padding=16)
         frame.grid()
-        self.start_button = ttk.Button(frame, text="Start", command=self.on_start)
-        self.start_button.grid(row=0, column=0, sticky="ew")
-        self.counter = ttk.Label(frame, text="0 saved this session")
-        self.counter.grid(row=1, column=0, pady=(8, 0))
-        self.status = ttk.Label(frame, text=notice, wraplength=240, foreground="#a15c00")
-        self.status.grid(row=2, column=0, pady=(4, 0))
+        ttk.Label(frame, text="bugcap live", style="Title.TLabel").grid(row=0, column=0, sticky="w")
+        self.start_button = ttk.Button(frame, text="Start capture", style="Accent.TButton", command=self.on_start)
+        self.start_button.grid(row=1, column=0, sticky="ew", pady=(12, 0))
+        self.counter = ttk.Label(frame, text="0 saved this session", style="Muted.TLabel")
+        self.counter.grid(row=2, column=0, pady=(10, 0))
+        self.status = ttk.Label(frame, text=notice, wraplength=260, style="Warning.TLabel")
+        self.status.grid(row=3, column=0, pady=(6, 0), sticky="w")
         root.protocol("WM_DELETE_WINDOW", self.on_close_control)
         self.pending_drafts = drafts.list_drafts(self.cfg.key if self.cfg else None)
         root.after(200, self.offer_drafts)
@@ -166,44 +212,56 @@ class _App:
             win.attributes("-topmost", True)
         except tk.TclError:
             pass
-        frame = ttk.Frame(win, padding=12)
+        self.style()
+        frame = ttk.Frame(win, padding=16)
         frame.grid()
         w = self.widgets = {}
+        ttk.Label(frame, text="New bug report", style="Title.TLabel").grid(row=0, column=0, columnspan=2, sticky="w")
 
+        preview = ttk.Frame(frame, style="Card.TFrame", padding=6)
+        preview.grid(row=1, column=0, columnspan=2, pady=(10, 12))
         try:
             image = tk.PhotoImage(file=str(self.session.screenshot))
             factor = max(1, -(-max(image.width(), image.height()) // THUMB))
             w["photo"] = image.subsample(factor, factor) if factor > 1 else image
-            ttk.Label(frame, image=w["photo"]).grid(row=0, column=0, columnspan=2, pady=(0, 8))
+            ttk.Label(preview, image=w["photo"], style="Card.TLabel").grid()
         except tk.TclError:
-            ttk.Label(frame, text="(preview unavailable)").grid(row=0, column=0, columnspan=2)
+            ttk.Label(preview, text="(preview unavailable)", style="Muted.Card.TLabel").grid()
 
         prefill = prefill or {}
-        ttk.Label(frame, text="Title").grid(row=1, column=0, sticky="w")
-        w["title"] = ttk.Entry(frame, width=48)
-        w["title"].grid(row=1, column=1, sticky="ew")
+        form = ttk.Frame(frame)
+        form.grid(row=2, column=0, columnspan=2, sticky="ew")
+        form.columnconfigure(1, weight=1)
+        ttk.Label(form, text="Title", style="Heading.TLabel").grid(row=0, column=0, sticky="nw", padx=(0, 12), pady=4)
+        w["title"] = ttk.Entry(form, width=48)
+        w["title"].grid(row=0, column=1, sticky="ew", pady=4)
         w["title"].insert(0, prefill.get("title", ""))
-        ttk.Label(frame, text="Notes").grid(row=2, column=0, sticky="nw")
-        w["notes"] = tk.Text(frame, width=48, height=6, wrap="word")
-        w["notes"].grid(row=2, column=1, sticky="ew")
+        ttk.Label(form, text="Notes", style="Heading.TLabel").grid(row=1, column=0, sticky="nw", padx=(0, 12), pady=4)
+        w["notes"] = tk.Text(
+            form, width=48, height=6, wrap="word", relief="flat", background=CARD, foreground=TEXT,
+            highlightthickness=1, highlightbackground=BORDER, highlightcolor=ACCENT, padx=6, pady=4,
+            font=self.body_font,
+        )
+        w["notes"].grid(row=1, column=1, sticky="ew", pady=4)
         w["notes"].insert("1.0", prefill.get("notes", ""))
         w["notes"].bind("<KeyRelease>", lambda e: self.check_notes())
-        ttk.Label(frame, text="Tags").grid(row=3, column=0, sticky="w")
-        w["tags"] = ttk.Entry(frame, width=48)
-        w["tags"].grid(row=3, column=1, sticky="ew")
+        ttk.Label(form, text="Tags", style="Heading.TLabel").grid(row=2, column=0, sticky="w", padx=(0, 12), pady=4)
+        w["tags"] = ttk.Entry(form, width=48)
+        w["tags"].grid(row=2, column=1, sticky="ew", pady=4)
         w["tags"].insert(0, ", ".join(initial_tags(self.cfg, prefill)))
-        ttk.Label(frame, text="Status").grid(row=4, column=0, sticky="w")
-        w["status"] = ttk.Combobox(frame, values=list(STATUSES), state="readonly", width=16)
+        ttk.Label(form, text="Status", style="Heading.TLabel").grid(row=3, column=0, sticky="w", padx=(0, 12), pady=4)
+        w["status"] = ttk.Combobox(form, values=list(STATUSES), state="readonly", width=16)
         w["status"].set(prefill.get("status", "open"))
-        w["status"].grid(row=4, column=1, sticky="w")
-        ttk.Label(frame, text="Repo").grid(row=5, column=0, sticky="w")
-        ttk.Label(frame, text=(self.cfg.key if self.cfg else "(none)")).grid(row=5, column=1, sticky="w")
-        w["error"] = ttk.Label(frame, text="", foreground="#b00020", wraplength=420)
-        w["error"].grid(row=6, column=0, columnspan=2, sticky="w", pady=(6, 0))
+        w["status"].grid(row=3, column=1, sticky="w", pady=4)
+        ttk.Label(form, text="Repo", style="Heading.TLabel").grid(row=4, column=0, sticky="w", padx=(0, 12), pady=4)
+        ttk.Label(form, text=(self.cfg.key if self.cfg else "(none)"), style="Muted.TLabel").grid(
+            row=4, column=1, sticky="w", pady=4)
+        w["error"] = ttk.Label(frame, text="", style="Error.TLabel", wraplength=420)
+        w["error"].grid(row=3, column=0, columnspan=2, sticky="w", pady=(6, 0))
         buttons = ttk.Frame(frame)
-        buttons.grid(row=7, column=0, columnspan=2, sticky="e", pady=(8, 0))
-        ttk.Button(buttons, text="Discard", command=self.on_discard).grid(row=0, column=0, padx=4)
-        ttk.Button(buttons, text="Save", command=self.on_save).grid(row=0, column=1)
+        buttons.grid(row=4, column=0, columnspan=2, sticky="e", pady=(12, 0))
+        ttk.Button(buttons, text="Discard", command=self.on_discard).grid(row=0, column=0, padx=(0, 8))
+        ttk.Button(buttons, text="Save", style="Accent.TButton", command=self.on_save).grid(row=0, column=1)
         win.protocol("WM_DELETE_WINDOW", self.on_close_details)
         w["title"].focus_set()
         self.check_notes()

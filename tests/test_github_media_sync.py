@@ -85,12 +85,12 @@ def test_oversize_media_skipped_with_warning_and_sync_continues(bugcap_home, fak
         res = sync.sync_report(store, store.get(rid), GitHubDestination(), _opts(max_upload_mb=1))
     assert res.created_issue
     assert any(
-        m.startswith("warning: skipped media #1 video-2097152.mp4 (2.0 MB): above the 1 MB upload limit")
+        m.startswith("warning: skipped media @v1 video-2097152.mp4 (2.0 MB): above the 1 MB upload limit")
         for m in res.messages
     )
     assert len(_puts(fake_gh)) == 1  # the small one still went up
     body = _body(fake_gh)
-    assert "@1 (not uploaded: above the 1 MB limit)" in body
+    assert "@v1 (not uploaded: above the 1 MB limit)" in body
     assert "[animated-5.gif](https://github.com/o/r/blob/abc123/bugcap-images/animated-5.gif)" in body
 
 
@@ -109,3 +109,19 @@ def test_references_replaced_in_issue_body(bugcap_home, fake_gh, sample_images):
     assert "mail a@b.com, literal @1" in first
     assert "@login-error" not in first
     assert body.count("![") == 2  # referenced images are not appended a second time
+
+
+def test_report_refs_become_issue_numbers_or_plain_text(bugcap_home, fake_gh):
+    _setup(fake_gh)
+    with Store() as store:
+        same = store.add("Same repo", repo="o/r")
+        store.set_ref(same.id, "github.issue", "o/r#42")
+        elsewhere = store.add("Elsewhere", repo="o/r")
+        store.set_ref(elsewhere.id, "github.issue", "other/x#7")
+        unsynced = store.add("Unsynced", repo="o/r")
+        rid = store.add(
+            "Bug", notes=f"dup of #{same.id}, see #{elsewhere.id}, also #{unsynced.id} and #999", repo="o/r",
+        ).id
+        sync.sync_report(store, store.get(rid), GitHubDestination(), _opts())
+    body = _body(fake_gh)
+    assert f"dup of #42, see other/x#7, also report {unsynced.id} and #999" in body

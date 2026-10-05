@@ -17,7 +17,7 @@ def test_validate_names_first_bad_token_and_lists_valid():
         validate_references("ok @1 bad @3 worse @4", media)
     assert exc.value.code == "invalid_reference"
     assert exc.value.message == "unknown reference @3 in notes"
-    assert exc.value.details["valid"] == ["@1", "@2", "@login-error"]
+    assert exc.value.details["valid"] == ["@i1", "@i2", "@login-error"]
 
 
 def test_validate_accepts_escapes_code_and_emails():

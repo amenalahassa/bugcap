@@ -101,5 +101,7 @@ def set_notes(store, report_id: int, body: dict) -> dict:
     notes = body.get("notes")
     if not isinstance(notes, str):
         raise ServiceError("bad_query", "body must be {\"notes\": \"...\"}")
-    service.set_notes(store, report_id, notes)
-    return get_report(store, report_id)
+    report = service.set_notes(store, report_id, notes)
+    view = get_report(store, report_id)
+    view["warnings"] = service.report_ref_warnings(store, report.notes)
+    return view

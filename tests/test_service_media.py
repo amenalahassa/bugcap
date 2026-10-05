@@ -38,7 +38,7 @@ def test_duplicate_label_case_insensitive_names_existing_index(store, sample_ima
     service.add_media(store, rid, [str(sample_images / "sample.png")], ["login-error"])
     with pytest.raises(ServiceError) as exc:
         service.add_media(store, rid, [str(sample_images / "sample.gif")], ["Login-Error"])
-    assert exc.value.code == "duplicate_label" and "#1" in exc.value.message
+    assert exc.value.code == "duplicate_label" and "@i1" in exc.value.message
     assert len(store.get(rid).media) == 1  # nothing added, no stray file copied
 
 

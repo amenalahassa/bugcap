@@ -94,7 +94,8 @@
       var i = document.createElement("img");
       i.src = m.url; i.alt = m.label || ("image " + m.index); fig.appendChild(i);
     }
-    var label = caption || ("#" + m.index);
+    var letters = {image: "i", video: "v", animated: "g", frames: "f"};
+    var label = caption || ("@" + (letters[m.kind] || "i") + m.index);
     if (m.label) label += " (" + m.label + ")";
     fig.appendChild(el("figcaption", label + " · " + m.kind + " · " + Math.round(m.size_bytes / 1024) + " KB"));
     return fig;

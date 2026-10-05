@@ -34,7 +34,7 @@ def test_notes_ok_and_invalid_reference(dashboard, rid):
     assert status == 200 and body["notes_raw"] == "see @1"
     status, body = dashboard.json("PUT", f"/api/reports/{rid}/notes", {"notes": "see @3"})
     assert status == 422 and body["code"] == "invalid_reference"
-    assert body["token"] == "@3" and body["valid"] == ["@1"]
+    assert body["token"] == "@3" and body["valid"] == ["@i1"]
     with Store() as s:
         assert s.get(rid).notes == "see @1"
 

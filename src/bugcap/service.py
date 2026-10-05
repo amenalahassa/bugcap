@@ -27,11 +27,14 @@ def _require(store: Store, report_id: int) -> Report:
 
 
 def find_media(media: list[Media], ref: str) -> Media:
-    """Locate a media item by index (`2`) or label (`login-error`, case-insensitive)."""
+    """Locate a media item by number (`v2`, `i2`, or the older `2`) or label (`login-error`,
+    case-insensitive). The leading `@` is optional."""
     text = str(ref).lstrip("@")
-    if text.isdigit():
+    number = refs.index_number(text)
+    if number is not None:
+        letter = refs.index_letter(text)
         for item in media:
-            if item.idx == int(text):
+            if item.idx == int(number) and (letter is None or refs.MEDIA_LETTERS.get(item.kind) == letter):
                 return item
     else:
         for item in media:
@@ -44,9 +47,12 @@ def find_media(media: list[Media], ref: str) -> Media:
 
 def validate_label(label: str) -> str:
     if not refs.LABEL_RE.match(label):
-        if label.isdigit():
-            raise ServiceError("invalid_label", f"label {label!r} cannot be only digits (those are indexes)")
         raise ServiceError("invalid_label", f"invalid label {label!r}: {_LABEL_HELP}")
+    if refs.RESERVED_LABEL_RE.match(label) or label.isdigit():
+        raise ServiceError(
+            "invalid_label",
+            f"label {label!r} is reserved: names like i1, v2, g3, f4 or 5 are media numbers",
+        )
     return label
 
 
@@ -59,7 +65,7 @@ def _check_new_labels(existing: list[Media], labels: list[Optional[str]]) -> Non
         clash = taken.get(label.lower())
         if clash is not None:
             raise ServiceError(
-                "duplicate_label", f"duplicate label {label!r} (already #{clash.idx})",
+                "duplicate_label", f"duplicate label {label!r} (already {refs.media_token(clash)})",
                 {"label": label, "index": clash.idx},
             )
         taken[label.lower()] = Media(0, 0, 0, label, "image", None, "", 0, None, "")
@@ -172,6 +178,26 @@ def create_report(
     return store.get(report.id), result
 
 
+def report_ref_warnings(store: Store, notes: str) -> list[str]:
+    """Warnings for `#N` references to reports that do not exist. They are not errors: the
+    text is kept, and the report may be created later or may have been deleted."""
+    return [
+        f"warning: #{number} in notes is not a report (kept as text)"
+        for number in sorted(set(refs.report_refs(notes)))
+        if store.get(number) is None
+    ]
+
+
+def delete_report(store: Store, report_id: int) -> Report:
+    """Delete a report, its media rows and their image/frame files. The rows go first, so a
+    failed delete leaves the files in place; synced GitHub issues are not touched."""
+    report = _require(store, report_id)
+    store.delete(report_id)
+    for item in report.media:
+        _delete_files(item)
+    return report
+
+
 def attach_captured(store: Store, report_id: int, path: str, label: Optional[str] = None) -> Media:
     """Attach a screenshot the capture tool already saved in the store (no copy)."""
     report = _require(store, report_id)
@@ -220,11 +246,11 @@ def add_recording(
 
 
 def format_note_entry(text: str, media: list, when=None) -> str:
-    """`[2026-10-04 10:15] @3: text`: timestamped and tied to the image(s) it was added with."""
+    """`[2026-10-04 10:15] @i3: text`: timestamped and tied to the image(s) it was added with."""
     from datetime import datetime
 
     stamp = (when or datetime.now().astimezone()).strftime("%Y-%m-%d %H:%M")
-    tokens = " ".join(f"@{m.idx}" for m in media)
+    tokens = " ".join(refs.media_token(m) for m in media)
     return f"[{stamp}] {tokens}: {text.strip()}" if tokens else f"[{stamp}] {text.strip()}"
 
 
@@ -276,7 +302,7 @@ def _refuse(item: Media, found: list[refs.Ref]) -> ServiceError:
     tokens = [r.token for r in found]
     return ServiceError(
         "referenced_image",
-        f"image #{item.idx} is referenced in notes by {', '.join(tokens)}; use --force to rewrite them",
+        f"{refs.media_token(item)} is referenced in notes by {', '.join(tokens)}; use --force to rewrite them",
         {"tokens": tokens},
     )
 
@@ -292,7 +318,7 @@ def relabel_media(store: Store, report_id: int, ref: str, new_label: str, force:
     found = _referencing(report, item, only_label=True) if item.label else []
     if found and not force:
         raise _refuse(item, found)
-    mapping = {item.label: f"@{new_label or item.idx}"} if item.label else {}
+    mapping = {item.label: f"@{new_label}" if new_label else refs.media_token(item)} if item.label else {}
     with store.transaction():
         store.update_media_label(item.id, new_label or None)
         notes, count = refs.rewrite_references_counted(report.notes, mapping)

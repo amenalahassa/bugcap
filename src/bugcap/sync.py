@@ -286,7 +286,7 @@ def _commit_media(store: Store, report: Report, destination: Destination, opts: 
         if too_big:
             size = sum(sz for _, sz in files)
             result.messages.append(
-                f"warning: skipped media #{m.idx} {name} ({human_size(size)}): "
+                f"warning: skipped media {refs.media_token(m)} {name} ({human_size(size)}): "
                 f"above the {opts.max_upload_mb:g} MB upload limit"
             )
             link.note = f"not uploaded: above the {opts.max_upload_mb:g} MB limit"
@@ -320,7 +320,7 @@ def _commit_media(store: Store, report: Report, destination: Destination, opts: 
                     target = f"{images.path}/{report.id}-{m.idx}-frames/{fname}"
                     link.urls.append(_upload(
                         store, report, destination, images, f"github.frame.{m.idx}.{n}", target, data, fname,
-                        m.idx * 1000 + n, result, f"bugcap: add frame {n} of media #{m.idx} for report #{report.id}",
+                        m.idx * 1000 + n, result, f"bugcap: add frame {n} of media {refs.media_token(m)} for report #{report.id}",
                     ))
                 store.set_ref(report.id, f"github.frames.{m.idx}", f"{images.repo}:{images.path}/{report.id}-{m.idx}-frames")
                 report.synced_refs[f"github.frames.{m.idx}"] = "set"
@@ -363,14 +363,33 @@ def _link_markdown(link: MediaLink) -> str:
     return f"[{label}]({link.urls[0]})"
 
 
-def _issue_body(report: Report, links: list) -> str:
+def _report_links(store: Store, report: Report, slug: str) -> dict:
+    """What each `#N` in the notes becomes on GitHub: the issue number when report N is synced
+    to this repo (`#42`), `slug#42` when it is synced elsewhere, otherwise plain `report N`
+    (so a bare `#N` never links to an unrelated issue)."""
+    mapping: dict = {}
+    for number in set(refs.report_refs(report.notes or "")):
+        other = store.get(number)
+        if other is None or other.id == report.id:
+            continue
+        linked = other.synced_refs.get("github.issue", "")
+        target, _, issue = linked.rpartition("#")
+        if issue:
+            mapping[number] = f"#{issue}" if target == slug else f"{target}#{issue}"
+        else:
+            mapping[number] = f"report {number}"
+    return mapping
+
+
+def _issue_body(report: Report, links: list, report_links: Optional[dict] = None) -> str:
     replacements: dict = {}
     for link in links:
         if link.urls:
             replacements[link.media.id] = _link_markdown(link)
         elif link.note:
-            replacements[link.media.id] = f"@{link.media.idx} ({link.note})"
+            replacements[link.media.id] = f"{refs.media_token(link.media)} ({link.note})"
     notes = refs.substitute(report.notes, report.media, replacements) if report.notes else ""
+    notes = refs.substitute_reports(notes, report_links or {})
     referenced = {
         found.id
         for r in refs.parse_references(report.notes or "")
@@ -393,6 +412,7 @@ def sync_report(store: Store, report: Report, destination: Destination, opts: Sy
     """Create/comment an issue and commit image copies, idempotently and resumably."""
     result = SyncResult()
     image_links = _commit_media(store, report, destination, opts, result)
+    report_links = _report_links(store, report, opts.issue_slug)
 
     issue_ref_str = report.synced_refs.get("github.issue")
     content_hash = _content_hash(report)
@@ -403,7 +423,7 @@ def sync_report(store: Store, report: Report, destination: Destination, opts: Sy
         ref = IssueRef(slug=slug, number=number, url=f"https://github.com/{slug}/issues/{number}")
         result.issue_url = ref.url
         if report.synced_refs.get("github.comment_hash") != content_hash:
-            destination.comment(ref, _issue_body(report, image_links))
+            destination.comment(ref, _issue_body(report, image_links, report_links))
             store.set_ref(report.id, "github.comment_hash", content_hash)
             report.synced_refs["github.comment_hash"] = content_hash
             result.commented = True
@@ -412,7 +432,7 @@ def sync_report(store: Store, report: Report, destination: Destination, opts: Sy
         if destination.supports_attach() and report.image_paths:
             attach = report.image_paths[0]
         ref = destination.create_issue(
-            opts.issue_slug, report.title, _issue_body(report, image_links), attach
+            opts.issue_slug, report.title, _issue_body(report, image_links, report_links), attach
         )
         store.set_ref(report.id, "github.issue", f"{ref.slug}#{ref.number}")
         report.synced_refs["github.issue"] = f"{ref.slug}#{ref.number}"

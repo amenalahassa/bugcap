@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- `bugcap capture --no-image` saves a text-only report without launching a capture tool.
+- `bugcap delete <id>` permanently deletes a report and its images (asks first; `--yes` skips the prompt). Synced GitHub issues are not touched.
+
+### Changed
+- Media are referenced by kind: `@i1` image, `@v2` video, `@g3` animated GIF, `@f4` frame set. Reports keep `#N`, so a media ref is never mistaken for a report. `@1` still works in existing notes.
+- Notes can reference reports with `#N`. An unknown number is kept as text with a warning, and `sync` turns it into the linked GitHub issue (or plain `report N`).
+- Labels that look like media numbers (`i1`, `v2`, `g3`, `f4`, `1`) are now reserved and rejected.
+- `bugcap live` uses a flatter, consistent light theme with an accent Save/Start button.
+
 ## 0.2.2 - 2026-10-04
 
 ### Fixed

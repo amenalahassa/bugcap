@@ -1,4 +1,10 @@
-"""`@` references in notes: `@3` (media index), `@login-error` (media label), `@@` (literal @).
+"""References in notes.
+
+`@` points at media, by kind letter and its number in the report: `@i3` image, `@v2` video,
+`@g4` animated GIF, `@f5` keyframes. `@login-error` is a media label and `@@` a literal `@`.
+The older `@3` form still reads as media 3, so existing notes keep working.
+
+`#N` points at report N (soft: an unknown number is kept as text and reported as a warning).
 
 References are ignored inside fenced code blocks, inline code spans and email-like text.
 Everything here is pure text processing; the rules for what a reference may point at
@@ -13,13 +19,19 @@ from .errors import ServiceError
 
 REMOVED_TEXT = "[image removed]"
 LABEL_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_\-]*$")
+MEDIA_LETTERS = {"image": "i", "video": "v", "animated": "g", "frames": "f"}
+# `v2`, `G4`, ...: a kind letter and a number. Labels may not look like this (see service.validate_label).
+INDEX_RE = re.compile(r"^([ivgfIVGF])([1-9][0-9]*)$")
+RESERVED_LABEL_RE = re.compile(r"^[ivgfIVGF][0-9]+$")  # any kind letter + digits, even i0
+_LEGACY_INDEX_RE = re.compile(r"^([1-9][0-9]*)$")
+_REPORT_RE = re.compile(r"(?:^|(?<=[\s(\[]))#([1-9][0-9]*)(?![\w\-])", re.M)
 _REF_RE = re.compile(r"@@|(?<![\w.%+\-])@([A-Za-z0-9_\-]+)(?![\w\-])")
 _FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 
 
 @dataclass
 class Ref:
-    token: str  # text as written, e.g. "@1", "@login-error", "@@"
+    token: str  # text as written, e.g. "@i1", "@login-error", "@@"
     start: int
     end: int
     kind: Literal["index", "label", "escape", "unknown"]
@@ -27,6 +39,14 @@ class Ref:
     @property
     def name(self) -> str:
         return self.token[1:]
+
+    @property
+    def key(self) -> str:
+        """What the reference points at: the image number for an index (`@i1` and `@1` both
+        give "1"), otherwise the name as written. Used to match rewrite mappings."""
+        if self.kind == "index":
+            return index_number(self.name) or self.name
+        return self.name
 
 
 def _blank(text: str) -> str:
@@ -103,8 +123,43 @@ def _mask_spans(text: str) -> str:
     return "".join(chars)
 
 
+def index_number(name: str) -> Optional[str]:
+    """`v3`, `I3` or the older `3` -> "3"; anything else -> None."""
+    match = INDEX_RE.match(name)
+    if match:
+        return match.group(2)
+    match = _LEGACY_INDEX_RE.match(name)
+    return match.group(1) if match else None
+
+
+def index_letter(name: str) -> Optional[str]:
+    """The lower-case kind letter of `v3` ("v"); None for the older `3` form."""
+    match = INDEX_RE.match(name)
+    return match.group(1).lower() if match else None
+
+
+def media_token(item) -> str:
+    """The reference that points at a media item as written in notes: `@i1`, `@v2`, `@g3`, `@f4`."""
+    return f"@{MEDIA_LETTERS.get(item.kind, 'i')}{item.idx}"
+
+
+def report_refs(notes: str) -> list[int]:
+    """Report numbers referenced by `#N` in the notes (code and emails excluded)."""
+    return [int(m.group(1)) for m in _REPORT_RE.finditer(mask(notes or ""))]
+
+
+def substitute_reports(notes: str, mapping: dict) -> str:
+    """Replace `#N` by `mapping[N]` where present (other `#N` are left as written)."""
+    out = notes or ""
+    for m in reversed(list(_REPORT_RE.finditer(mask(out)))):
+        number = int(m.group(1))
+        if number in mapping:
+            out = out[: m.start()] + mapping[number] + out[m.end():]
+    return out
+
+
 def _classify(name: str) -> str:
-    if name.isdigit() and not name.startswith("0"):
+    if index_number(name) is not None:
         return "index"
     if LABEL_RE.match(name):
         return "label"
@@ -123,10 +178,12 @@ def parse_references(notes: str) -> list[Ref]:
 
 
 def resolve(ref: Ref, media: list):
-    """The media item a reference points at (label match is case-sensitive), or None."""
+    """The media item a reference points at (label match is case-sensitive), or None.
+    `@v2` only matches a video; the older `@2` matches whatever item is number 2."""
     if ref.kind == "index":
+        letter = index_letter(ref.name)
         for item in media:
-            if item.idx == int(ref.name):
+            if item.idx == int(ref.key) and (letter is None or MEDIA_LETTERS.get(item.kind) == letter):
                 return item
     elif ref.kind == "label":
         for item in media:
@@ -136,7 +193,7 @@ def resolve(ref: Ref, media: list):
 
 
 def valid_tokens(media: list) -> list[str]:
-    indexes = [f"@{m.idx}" for m in sorted(media, key=lambda m: m.idx)]
+    indexes = [media_token(m) for m in sorted(media, key=lambda m: m.idx)]
     labels = [f"@{m.label}" for m in sorted(media, key=lambda m: m.idx) if m.label]
     return indexes + labels
 
@@ -158,8 +215,8 @@ def _rewrite(notes: str, mapping: dict[str, str]) -> tuple[str, int]:
     out = notes
     count = 0
     for ref in reversed(parse_references(notes)):
-        if ref.kind in ("index", "label") and ref.name in mapping:
-            replacement = mapping[ref.name]
+        if ref.kind in ("index", "label") and ref.key in mapping:
+            replacement = mapping[ref.key]
             if replacement != ref.token:
                 out = out[: ref.start] + replacement + out[ref.end :]
                 count += 1
@@ -167,7 +224,7 @@ def _rewrite(notes: str, mapping: dict[str, str]) -> tuple[str, int]:
 
 
 def rewrite_references(notes: str, mapping: dict[str, str]) -> str:
-    """Replace references by name (`{"2": "@1", "old": "@new", "3": "[image removed]"}`).
+    """Replace references by key (`{"2": "@i1", "old": "@new", "3": "[image removed]"}`).
     Code, emails and `@@` are never touched; other text is preserved exactly."""
     return _rewrite(notes, mapping)[0]
 
@@ -186,7 +243,7 @@ def references_to(notes: str, item, media_all: list) -> list[Ref]:
 
 
 def display_notes(notes: str, media: list) -> str:
-    """Notes for terminal display: `@1` becomes `@1 (images/…)` and `@@` prints as `@`."""
+    """Notes for terminal display: `@i1` becomes `@i1 (images/…)` and `@@` prints as `@`."""
     out = notes or ""
     for ref in reversed(parse_references(out)):
         if ref.kind == "escape":

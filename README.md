@@ -130,7 +130,7 @@ pull and sync, MCP, and where data lives per OS.
 
 Notes on the more involved behaviour:
 
-- **`@` references.** `@1` or `@login-error` in a note points at an image. They are validated on save, and relabelling or removing a referenced image needs `--force`.
+- **References.** In a note, `@i1` is image 1, `@v2` a video, `@g3` an animated GIF, `@f4` a frame set, and `@login-error` a labelled item. `#3` points at report 3 (a missing one is kept as text with a warning). Media references are validated on save, and relabelling or removing a referenced item needs `--force`.
 - **Repo values** (`init`, `sync`, `config repo set`) are checked for format and, with `gh`, for existence. Changing the repo identity offers to move existing reports.
 - **Media sync** over `[sync] max_upload_mb` (default 25) is skipped with a warning.
 

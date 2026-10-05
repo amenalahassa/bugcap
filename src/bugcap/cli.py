@@ -42,17 +42,26 @@ def print_ingest(added, rejected) -> None:
     """One line per input: `added #<idx> ...` on stdout, `skipped ...` on stderr."""
     for media in added:
         name = os.path.basename(media.path or "")
-        print(f"added #{media.idx} {name} ({media.kind}, {human_size(media.size_bytes)})")
+        print(f"added {refs.media_token(media)} {name} ({media.kind}, {human_size(media.size_bytes)})")
     for item in rejected:
         print(f"skipped {item['source']}: {item['reason']}", file=sys.stderr)
 
 
 # --- capture / list / show ----------------------------------------------------
 
+def _warn_report_refs(store: Store, notes) -> None:
+    """Soft warnings for `#N` references to reports that do not exist (never a failure)."""
+    for line in service.report_ref_warnings(store, notes or ""):
+        print(line, file=sys.stderr)
+
+
 def cmd_capture(args: argparse.Namespace) -> int:
     cfg = current_repo()
     captured: Optional[str] = None
-    if not args.image:
+    if args.no_image and (args.image or args.label):
+        print("error: --no-image cannot be combined with --image or --label", file=sys.stderr)
+        return 2
+    if not args.image and not args.no_image:
         try:
             captured = str(capture.capture_screenshot())
         except CaptureError as exc:
@@ -89,6 +98,8 @@ def cmd_capture(args: argparse.Namespace) -> int:
         except ServiceError as exc:
             print_service_error(exc)
             return 1
+        if report is not None:
+            _warn_report_refs(store, report.notes)
 
     if report is None:
         print_ingest([], result.rejected)
@@ -101,6 +112,27 @@ def cmd_capture(args: argparse.Namespace) -> int:
     if args.image:
         print_ingest(result.added, result.rejected)
     return 1 if result.rejected else 0
+
+
+def cmd_delete(args: argparse.Namespace) -> int:
+    with Store() as store:
+        report = resolve_report(store, args.id)
+        if report is None:
+            return 1
+        if not args.yes:
+            if sys.stdin is None or not sys.stdin.isatty():
+                print("error: refusing to delete without confirmation; re-run with --yes", file=sys.stderr)
+                return 2
+            answer = input(
+                f"Delete report #{report.id} {report.title!r} and its {len(report.media)} image(s)? [y/N] "
+            ).strip().lower()
+            if answer != "y":
+                print("Nothing deleted.")
+                return 1
+        service.delete_report(store, args.id)
+
+    print(f"Deleted report #{report.id}: {report.title}")
+    return 0
 
 
 def cmd_list(args: argparse.Namespace) -> int:
@@ -142,7 +174,7 @@ def cmd_show(args: argparse.Namespace) -> int:
         for m in detailed:
             where = m.path or f"({len(m.frames)} frames)"
             origin = f"  (source: {m.source})" if m.source else ""
-            print(f"    #{m.idx}  {m.kind:8s} {m.label or '-':12s} {where}  {human_size(m.size_bytes)}{origin}")
+            print(f"    {refs.media_token(m)}  {m.kind:8s} {m.label or '-':12s} {where}  {human_size(m.size_bytes)}{origin}")
     print(f"  synced_refs:")
     if report.synced_refs:
         for tracker, ref in report.synced_refs.items():
@@ -440,6 +472,8 @@ def cmd_edit(args: argparse.Namespace) -> int:
             print(f"error: {exc}", file=sys.stderr)
             return 2
 
+        _warn_report_refs(store, report.notes)
+
     changed = []
     if args.title is not None:
         changed.append("title")
@@ -529,6 +563,7 @@ def cmd_attach(args: argparse.Namespace) -> int:
                 print("warning: the image was attached but the note was not saved.", file=sys.stderr)
                 return 1
         current = store.get(args.id)
+        _warn_report_refs(store, current.notes)
         if args.image:
             try:
                 refs.validate_references(current.notes, current.media)
@@ -552,7 +587,7 @@ def cmd_images(args: argparse.Namespace) -> int:
         if args.action is None:
             for m in report.media:
                 where = m.path or f"({len(m.frames)} frames)"
-                print(f"#{m.idx}  {m.label or '-':12s} {m.kind:8s} {human_size(m.size_bytes):>9s}  {where}")
+                print(f"{refs.media_token(m)}  {m.label or '-':12s} {m.kind:8s} {human_size(m.size_bytes):>9s}  {where}")
             return 0
         try:
             if args.action == "relabel":
@@ -634,8 +669,9 @@ def cmd_record(args: argparse.Namespace) -> int:
             recorder.discard(result)
             print_service_error(exc)
             return 1
+        _warn_report_refs(store, report.notes)
     print(f"recorded {result.duration:.1f} s, {human_size(result.size_bytes)} ({result.kind}), stopped: {result.reason}")
-    print(f"added #{media.idx} to report #{report.id}")
+    print(f"added {refs.media_token(media)} to report #{report.id}")
     return 0
 
 
@@ -828,7 +864,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--image", action="append", metavar="SRC",
                    help="Import an image (path, glob or http(s) URL) instead of launching a capture tool; repeatable.")
     p.add_argument("--label", action="append", help="Label for the --image at the same position (repeatable).")
+    p.add_argument("--no-image", dest="no_image", action="store_true",
+                   help="Save a text-only report: no capture tool and no image.")
     p.set_defaults(func=cmd_capture)
+
+    p = sub.add_parser("delete", help="Permanently delete a report and its images (not synced GitHub issues).")
+    p.add_argument("id", type=int, help="Report id (see `bugcap list`).")
+    p.add_argument("--yes", action="store_true", help="Delete without the confirmation prompt.")
+    p.set_defaults(func=cmd_delete)
 
     p = sub.add_parser("list", help="List reports (current repo only, unless --all).")
     p.add_argument("--all", action="store_true", help="List reports from every repo.")
