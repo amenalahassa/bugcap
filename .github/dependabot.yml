@@ -8,3 +8,7 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    ignore:
+      # 2.x breaks the MCP server; see the "Support the mcp SDK 2.x" issue.
+      - dependency-name: mcp
+        update-types: ["version-update:semver-major"]

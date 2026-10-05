@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from fixtures.make_images import gif_bytes, jpeg_bytes, png_bytes, webp_bytes
 
@@ -54,7 +56,7 @@ def test_import_copies_into_store(bugcap_home, sample_images):
 
 def test_glob_sorted_and_no_match(sample_images):
     matches = ingest.resolve_glob(str(sample_images / "sample.*"))
-    assert [m.rsplit("/", 1)[1] for m in matches] == ["sample.gif", "sample.jpg", "sample.png", "sample.webp"]
+    assert [Path(m).name for m in matches] == ["sample.gif", "sample.jpg", "sample.png", "sample.webp"]
     items = ingest.expand_sources([str(sample_images / "nope-*.png")])
     assert items[0].error.code == "not_found" and "nope-*.png" in items[0].error.message
 
