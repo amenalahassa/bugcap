@@ -9,8 +9,10 @@ from __future__ import annotations
 import glob
 import hashlib
 import os
+import re
 import socket
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 from dataclasses import dataclass, field
@@ -18,13 +20,15 @@ from pathlib import Path
 from typing import Literal, Optional
 
 from .errors import ServiceError
-from .paths import images_dir, to_data_relative
+from .paths import files_dir, images_dir, to_data_relative
+from .store import guess_mime
 
 MAX_DOWNLOAD_BYTES = 25 * 1024 * 1024
 DOWNLOAD_TIMEOUT = 20
 MAX_REDIRECTS = 5
 
 _EXT = {"image/png": ".png", "image/jpeg": ".jpg", "image/gif": ".gif", "image/webp": ".webp"}
+_SUFFIX_RE = re.compile(r"^\.[a-z0-9]{1,16}$")
 
 
 @dataclass
@@ -146,13 +150,9 @@ def _clearly_not_image(content_type: str) -> bool:
     return main == "text" or any(k in sub for k in ("html", "json", "xml"))
 
 
-def download_url(
-    url: str,
-    *,
-    max_bytes: int = MAX_DOWNLOAD_BYTES,
-    timeout: float = DOWNLOAD_TIMEOUT,
-    max_redirects: int = MAX_REDIRECTS,
-) -> StoredFile:
+def _fetch(url: str, *, max_bytes: int, timeout: float, max_redirects: int, images_only: bool) -> tuple[bytes, str]:
+    """GET `url`; returns (body, content-type hint). With `images_only`, text/HTML/JSON/XML
+    responses are refused early."""
     if not url.lower().startswith(("http://", "https://")):
         raise ServiceError("invalid_image", "only http(s) URLs are supported")
     request = urllib.request.Request(url, headers={"User-Agent": "bugcap"}, method="GET")
@@ -160,7 +160,7 @@ def download_url(
     try:
         with opener.open(request, timeout=timeout) as response:
             hint = response.headers.get("Content-Type", "").split(";")[0].strip().lower()
-            if _clearly_not_image(hint):
+            if images_only and _clearly_not_image(hint):
                 raise ServiceError("invalid_image", f"not an image (content is {hint})")
             declared = response.headers.get("Content-Length")
             if declared and declared.isdigit() and int(declared) > max_bytes:
@@ -187,12 +187,87 @@ def download_url(
         if isinstance(exc.reason, (socket.timeout, TimeoutError)):
             raise ServiceError("timeout", f"timed out after {timeout:g} s") from exc
         raise ServiceError("invalid_image", f"download failed: {exc.reason}") from exc
-    data = b"".join(chunks)
+    return b"".join(chunks), hint
+
+
+def download_url(
+    url: str,
+    *,
+    max_bytes: int = MAX_DOWNLOAD_BYTES,
+    timeout: float = DOWNLOAD_TIMEOUT,
+    max_redirects: int = MAX_REDIRECTS,
+) -> StoredFile:
+    data, hint = _fetch(url, max_bytes=max_bytes, timeout=timeout, max_redirects=max_redirects, images_only=True)
     try:
         return _store(data, url)
     except ServiceError as exc:
         suffix = f" (content is {hint})" if hint else ""
         raise ServiceError(exc.code, exc.message + suffix) from None
+
+
+# --- any file (attachments) ---------------------------------------------------
+
+def _store_file(data: bytes, source: str, name: str) -> StoredFile:
+    """Store any bytes under their content hash, keeping a sane extension so the file still
+    opens with the right program. Identical content is stored once."""
+    suffix = Path(name).suffix.lower()
+    if not _SUFFIX_RE.match(suffix):
+        suffix = ""
+    dest = files_dir() / f"{hashlib.sha256(data).hexdigest()}{suffix}"
+    if dest.is_file() and dest.stat().st_size == len(data):
+        return StoredFile(to_data_relative(dest), dest, guess_mime(name), len(data), source, reused=True)
+    tmp = dest.with_name(f"{dest.name}.{uuid.uuid4().hex}.part")
+    try:
+        tmp.write_bytes(data)
+        os.replace(tmp, dest)
+    finally:
+        tmp.unlink(missing_ok=True)
+    return StoredFile(to_data_relative(dest), dest, guess_mime(name), len(data), source)
+
+
+def import_local_file(path: Path) -> StoredFile:
+    path = Path(path).expanduser()
+    if path.is_dir():
+        raise ServiceError("invalid_file", "is a directory")
+    if not path.is_file():
+        raise ServiceError("not_found", "file not found")
+    try:
+        data = path.read_bytes()
+    except OSError as exc:
+        raise ServiceError("invalid_file", f"cannot read file: {exc.strerror or exc}")
+    return _store_file(data, str(path), path.name)
+
+
+def download_file(
+    url: str,
+    *,
+    max_bytes: int = MAX_DOWNLOAD_BYTES,
+    timeout: float = DOWNLOAD_TIMEOUT,
+    max_redirects: int = MAX_REDIRECTS,
+) -> StoredFile:
+    data, _ = _fetch(url, max_bytes=max_bytes, timeout=timeout, max_redirects=max_redirects, images_only=False)
+    return _store_file(data, url, urllib.parse.urlparse(url).path)
+
+
+def adopt_file(path) -> Path:
+    """Give a file already copied into the files directory its content-derived name (same
+    rules as `adopt`): an identical file already stored wins and the new copy is dropped."""
+    path = Path(path)
+    if path.parent != files_dir():
+        return path
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return path
+    suffix = path.suffix.lower() if _SUFFIX_RE.match(path.suffix.lower()) else ""
+    dest = files_dir() / f"{hashlib.sha256(data).hexdigest()}{suffix}"
+    if dest == path:
+        return path
+    if dest.is_file() and dest.stat().st_size == len(data):
+        path.unlink(missing_ok=True)
+        return dest
+    os.replace(path, dest)
+    return dest
 
 
 def resolve_glob(pattern: str) -> list[str]:
@@ -227,6 +302,14 @@ def ingest_item(item: Item) -> StoredFile:
     if classify_source(item.source) == "url":
         return download_url(item.source)
     return import_local(Path(item.source))
+
+
+def ingest_file_item(item: Item) -> StoredFile:
+    if item.error is not None:
+        raise item.error
+    if classify_source(item.source) == "url":
+        return download_file(item.source)
+    return import_local_file(Path(item.source))
 
 
 def ingest_sources(sources: list[str], labels: Optional[list[Optional[str]]] = None) -> IngestResult:

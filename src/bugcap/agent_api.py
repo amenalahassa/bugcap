@@ -97,10 +97,19 @@ def get_report(store: Store, id: int) -> dict:
 
 def attach_image(store: Store, id: int, sources: list[str], labels: Optional[list] = None) -> dict:
     """Attach images (paths, globs, http(s) URLs) to a report; partial batches are reported."""
+    return _attach(store, id, sources, labels, service.add_media)
+
+
+def attach_file(store: Store, id: int, sources: list[str], labels: Optional[list] = None) -> dict:
+    """Attach files of any type (paths, globs, http(s) URLs) to a report."""
+    return _attach(store, id, sources, labels, service.add_files)
+
+
+def _attach(store: Store, id: int, sources: list[str], labels, add) -> dict:
     if not sources or len(sources) > 20:
         return {"code": "bad_query", "error": "sources must contain 1 to 20 entries"}
     try:
-        result = service.add_media(store, id, list(sources), labels)
+        result = add(store, id, list(sources), labels)
     except ServiceError as exc:
         return {"error": exc.message, **exc.as_dict()}
     return {

@@ -31,8 +31,10 @@ def parse_range(header: str | None, size: int):
     return start, min(end, size - 1)
 
 
-def serve_media(handler, rel_path, mime: str, range_header: str | None) -> None:
-    """`rel_path` is the stored data-relative path; it must resolve inside images/ or media/."""
+def serve_media(handler, rel_path, mime: str, range_header: str | None, download_name: str | None = None) -> None:
+    """`rel_path` is the stored data-relative path; it must resolve inside the media store.
+    With `download_name` (attached files of any type) the bytes are always sent as an opaque
+    download, never rendered, so an uploaded HTML or SVG file cannot run on the dashboard origin."""
     try:
         path = resolve_data_path(rel_path)
         if not path.is_file():
@@ -53,7 +55,12 @@ def serve_media(handler, rel_path, mime: str, range_header: str | None) -> None:
     start, end = rng if rng else (0, size - 1)
     handler.send_response(206 if rng else 200)
     handler.send_security_headers()
-    handler.send_header("Content-Type", mime)
+    if download_name is not None:
+        safe = re.sub(r"[^A-Za-z0-9._-]", "_", download_name)[:100] or "file"
+        handler.send_header("Content-Type", "application/octet-stream")
+        handler.send_header("Content-Disposition", f'attachment; filename="{safe}"')
+    else:
+        handler.send_header("Content-Type", mime)
     handler.send_header("Accept-Ranges", "bytes")
     handler.send_header("Cache-Control", "private, max-age=3600")
     handler.send_header("Content-Length", str(end - start + 1) if size else "0")

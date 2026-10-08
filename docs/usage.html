@@ -83,7 +83,9 @@ bugcap init --images-repo owner/assets      # where synced image copies are comm
 <pre><code>bugcap capture --no-image --title "Typo on settings page" --note "says 'Setings'"   # text only, no screenshot
 bugcap capture --image ./a.png --label login-error --title "Login fails" --note "See @i1 and @login-error"
 bugcap attach &lt;id&gt; --image './shots/*.png' --image https://ci.example.com/run/42.png --label after-fix
-bugcap attach &lt;id&gt; --image ./after.png --note "after the fix"   # the note is timestamped and tied to the image</code></pre>
+bugcap attach &lt;id&gt; --image ./after.png --note "after the fix"   # the note is timestamped and tied to the image
+bugcap attach &lt;id&gt; --file ./server.log --file './dumps/*.zip' --file-label log   # files of any type (pdf, log, zip...)</code></pre>
+    <p>Attached files are copied into the store and referred to in notes as <code>@d1</code>, <code>@d2</code>, or by label. Identical files are stored once. In the dashboard they download instead of rendering, and <code>sync</code> never uploads them to GitHub (the issue keeps a "kept local" note in their place).</p>
     <p>Manage a report's images:</p>
 <pre><code>bugcap images &lt;id&gt;                              # index, label, kind, size
 bugcap images &lt;id&gt; relabel login-error sign-in  # refused while notes reference it, unless --force
@@ -98,6 +100,7 @@ bugcap images &lt;id&gt; remove 2 --force             # rewrites @ references in
     <p>A small always-on-top window sits in the top-right corner while you test. Needs tkinter and a desktop session.</p>
     <ul>
       <li><strong>Screenshot</strong> and <strong>Record</strong> (then <strong>Stop</strong>) each add a capture to a staged set. Stage as many images and videos as you like, in any mix.</li>
+      <li><strong>Upload image...</strong> and <strong>Attach file...</strong> open a file picker (several files at once) and stage what you pick, exactly like <code>attach --image</code> and <code>attach --file</code>. Images are checked; files can be of any type and are referred to as <code>@d1</code>, <code>@d2</code>, and so on.</li>
       <li><strong>New bug from N items</strong> turns the staged set into one report; refer to the items in the notes with <code>@i1</code>, <code>@v2</code>, and so on.</li>
       <li><strong>Add to existing bug</strong> attaches the staged set, plus an optional note, to a bug you already filed.</li>
       <li><strong>New bug (note only)</strong> files a bug with no media: a title, a note and optional tags.</li>
@@ -127,6 +130,7 @@ bugcap delete &lt;id&gt;                  # asks first; --yes skips the prompt (
       <tr><td><code>@v2</code></td><td>video 2 (from <code>record --format video</code>)</td></tr>
       <tr><td><code>@g3</code></td><td>animated GIF 3</td></tr>
       <tr><td><code>@f4</code></td><td>frame set 4 (from <code>record --format frames</code>)</td></tr>
+      <tr><td><code>@d5</code></td><td>attached file 5 (from <code>attach --file</code>)</td></tr>
       <tr><td><code>@login-error</code></td><td>the media item with that label</td></tr>
       <tr><td><code>#3</code></td><td>report 3 (kept as text with a warning if it does not exist)</td></tr>
       <tr><td><code>@@</code></td><td>a literal <code>@</code></td></tr>
@@ -149,7 +153,7 @@ bugcap dashboard --port 0               # pick a free port</code></pre>
     <p>This creates or updates the issue and commits a plain copy of each image to the images repo, so agents can read it. Media over the size limit is skipped with a warning. The limit is <code>[sync] max_upload_mb</code>, 25 MB by default.</p>
 
     <h2 id="mcp">Connect your agent (MCP)</h2>
-    <p>The MCP server lets an agent list reports, read them (images included), request a screenshot, pull issues, attach images and update notes.</p>
+    <p>The MCP server lets an agent list reports, read them (images included), request a screenshot, pull issues, attach images or files and update notes.</p>
 <pre><code>claude mcp add bugcap -- bugcap mcp-serve</code></pre>
     <p>Or add it to a project's <code>.mcp.json</code>:</p>
 <pre><code>{
@@ -165,6 +169,7 @@ bugcap dashboard --port 0               # pick a free port</code></pre>
       <tr><td><code>request_screenshot</code></td><td>Ask you to capture for a report or issue. Returns at once when there's no desktop.</td></tr>
       <tr><td><code>pull_issues</code></td><td>Import GitHub issues as reports.</td></tr>
       <tr><td><code>attach_image</code></td><td>Attach paths, globs or URLs, with optional labels.</td></tr>
+      <tr><td><code>attach_file</code></td><td>Attach files of any type (paths, globs or URLs), referred to as <code>@d1</code> or by label.</td></tr>
       <tr><td><code>update_notes</code></td><td>Update notes. Invalid <code>@</code> references come back as JSON with a <code>code</code>.</td></tr>
     </table>
     <h3>Logs</h3>

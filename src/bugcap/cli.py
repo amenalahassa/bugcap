@@ -40,7 +40,7 @@ def print_service_error(exc: ServiceError) -> None:
 def print_ingest(added, rejected) -> None:
     """One line per input: `added #<idx> ...` on stdout, `skipped ...` on stderr."""
     for media in added:
-        name = os.path.basename(media.path or "")
+        name = os.path.basename((media.source if media.kind == "file" and media.source else media.path) or "")
         print(f"added {refs.media_token(media)} {name} ({media.kind}, {human_size(media.size_bytes)})")
     for item in rejected:
         print(f"skipped {item['source']}: {item['reason']}", file=sys.stderr)
@@ -536,14 +536,22 @@ def cmd_attach(args: argparse.Namespace) -> int:
         added: list = []
         rejected: list = []
         shot_path = None
-        if args.image:
-            try:
-                result = service.add_media(store, args.id, list(args.image), labels)
-            except ServiceError as exc:
-                print_service_error(exc)
-                return 1
-            added, rejected = result.added, result.rejected
-            print_ingest(added, rejected)
+        if args.image or args.file:
+            batches = (
+                (args.image, service.add_media, labels),
+                (args.file, service.add_files, list(args.file_label or [])),
+            )
+            for sources, add, batch_labels in batches:
+                if not sources:
+                    continue
+                try:
+                    result = add(store, args.id, list(sources), batch_labels)
+                except ServiceError as exc:
+                    print_service_error(exc)
+                    return 1
+                added += result.added
+                rejected += result.rejected
+                print_ingest(result.added, result.rejected)
         else:
             try:
                 shot_path = capture.capture_screenshot()
@@ -568,7 +576,7 @@ def cmd_attach(args: argparse.Namespace) -> int:
                 return 1
         current = store.get(args.id)
         _warn_report_refs(store, current.notes)
-        if args.image:
+        if args.image or args.file:
             try:
                 refs.validate_references(current.notes, current.media)
             except ServiceError as exc:
@@ -901,12 +909,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("tags", nargs="+")
     p.set_defaults(func=cmd_tag)
 
-    p = sub.add_parser("attach", help="Attach a screenshot (captured or imported) to a report.")
+    p = sub.add_parser("attach", help="Attach a screenshot (captured or imported) or any file to a report.")
     p.add_argument("id", type=int)
     p.add_argument("--image", action="append", metavar="SRC",
                    help="Import an image (path, glob or http(s) URL) instead of launching a capture tool; repeatable.")
     p.add_argument("--label", action="append", help="Label for the --image at the same position (repeatable).")
-    p.add_argument("--note", help="Text appended to the report's notes, tied to the image(s) added here.")
+    p.add_argument("--file", action="append", metavar="SRC",
+                   help="Attach a file of any type (path, glob or http(s) URL); repeatable. "
+                        "Refer to it in notes as @d1, @d2, ... or by label.")
+    p.add_argument("--file-label", action="append", help="Label for the --file at the same position (repeatable).")
+    p.add_argument("--note", help="Text appended to the report's notes, tied to the item(s) added here.")
     p.set_defaults(func=cmd_attach)
 
     p = sub.add_parser("images", help="List a report's images, or relabel/remove one.")

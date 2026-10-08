@@ -187,6 +187,13 @@ def build_server():
             return json.dumps(agent_api.attach_image(store, id, sources, labels))
 
     @tool()
+    def attach_file(id: int, sources: list[str], labels: Optional[list[Optional[str]]] = None) -> str:
+        """Attach files of any type (file paths, globs or http(s) URLs) to a report, with optional
+        labels (one per source, null for none). Notes can then refer to them as @d1 or @label."""
+        with Store() as store:
+            return json.dumps(agent_api.attach_file(store, id, sources, labels))
+
+    @tool()
     def update_notes(id: int, notes: str) -> str:
         """Replace a report's notes. @i1 / @label references must point at the report's images."""
         with Store() as store:

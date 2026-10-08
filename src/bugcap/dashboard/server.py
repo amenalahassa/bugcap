@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hmac
 import json
+import os
 import re
 import secrets
 import sys
@@ -182,7 +183,10 @@ class Handler(BaseHTTPRequestHandler):
         if frame_no is None:
             if media.kind == "frames" or not media.path:
                 return self.send_json(404, {"code": "not_found", "message": "media not found"})
-            return serve_media(self, media.path, media.mime, self.headers.get("Range"))
+            name = None
+            if media.kind == "file":
+                name = os.path.basename((media.source or "").replace("\\", "/")) or os.path.basename(media.path)
+            return serve_media(self, media.path, media.mime, self.headers.get("Range"), name)
         frame = next((f for f in media.frames if f.frame_no == frame_no), None)
         if frame is None:
             return self.send_json(404, {"code": "not_found", "message": "frame not found"})

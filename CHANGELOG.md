@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Attach files of any type to a report: `bugcap attach <id> --file SRC [--file-label L]` (paths, globs or URLs, repeatable) and the `attach_file` MCP tool. Notes refer to them as `@d1`, `@d2` or by label.
+- Live mode: **Upload image...** and **Attach file...** buttons stage files picked from disk, for a new bug or an existing one.
+
+### Changed
+- The store schema moves to version 3 (the `media` table accepts the new `file` kind); existing databases migrate on first open.
+- Attached files are served by the dashboard as downloads and are never uploaded by `sync`.
+
 ## 0.5.1 - 2026-10-05
 
 ### Added

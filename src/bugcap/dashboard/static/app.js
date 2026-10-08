@@ -90,11 +90,15 @@
         var img = document.createElement("img");
         img.src = f.url; img.alt = "frame " + f.frame_no; fig.appendChild(img);
       });
+    } else if (m.kind === "file") {
+      var a = document.createElement("a");
+      a.href = m.url; a.download = ""; a.textContent = "Download " + (m.label || ("file " + m.index));
+      fig.appendChild(a);
     } else {
       var i = document.createElement("img");
       i.src = m.url; i.alt = m.label || ("image " + m.index); fig.appendChild(i);
     }
-    var letters = {image: "i", video: "v", animated: "g", frames: "f"};
+    var letters = {image: "i", video: "v", animated: "g", frames: "f", file: "d"};
     var label = caption || ("@" + (letters[m.kind] || "i") + m.index);
     if (m.label) label += " (" + m.label + ")";
     fig.appendChild(el("figcaption", label + " · " + m.kind + " · " + Math.round(m.size_bytes / 1024) + " KB"));

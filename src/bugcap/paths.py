@@ -58,13 +58,19 @@ def media_dir() -> Path:
     return path
 
 
+def files_dir() -> Path:
+    path = data_dir() / "files"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
 def drafts_dir() -> Path:
     path = data_dir() / "drafts"
     path.mkdir(parents=True, exist_ok=True)
     return path
 
 
-_STORE_DIRS = ("images", "media")
+_STORE_DIRS = ("images", "media", "files")
 
 
 def to_data_relative(path) -> str:

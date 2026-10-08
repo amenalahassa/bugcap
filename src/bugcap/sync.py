@@ -282,6 +282,9 @@ def _commit_media(store: Store, report: Report, destination: Destination, opts: 
         name = os.path.basename(files[0][0]) if m.kind != "frames" else f"frames-{m.idx}"
         link = MediaLink(m, name, [])
         links[m.id] = link
+        if m.kind == "file":  # arbitrary files may be private; they are never pushed to a tracker
+            link.note = "attached file, kept local (not uploaded)"
+            continue
         too_big = [(p, sz) for p, sz in files if sz > limit]
         if too_big:
             size = sum(sz for _, sz in files)

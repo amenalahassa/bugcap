@@ -14,9 +14,9 @@ from enum import Enum
 from pathlib import Path
 from typing import Callable, Optional
 
-from . import drafts, refs, service
+from . import drafts, ingest, refs, service
 from .errors import ServiceError
-from .paths import drafts_dir, images_dir, media_dir
+from .paths import drafts_dir, files_dir, images_dir, media_dir
 from .store import Media, Report, Store
 
 
@@ -30,25 +30,31 @@ class LiveState(Enum):
 @dataclass
 class Staged:
     """One captured/recorded item waiting to be attached to a report."""
-    kind: str  # image | video | animated | frames
+    kind: str  # image | video | animated | frames | file
     path: Optional[Path]
     mime: str = "image/png"
     size_bytes: int = 0
     frames: list = field(default_factory=list)  # [(path, size)] for kind "frames"
+    source: Optional[str] = None  # original file name of an upload
+    shared: bool = False  # content-addressed upload: the stored file may belong to other reports
 
     def files(self) -> list[Path]:
         return ([self.path] if self.path else []) + [Path(p) for p, _ in self.frames]
 
     def to_item(self) -> dict:
         return {"kind": self.kind, "path": str(self.path) if self.path else None, "mime": self.mime,
-                "size_bytes": self.size_bytes, "frames": [(str(p), s) for p, s in self.frames]}
+                "size_bytes": self.size_bytes, "frames": [(str(p), s) for p, s in self.frames],
+                "source": self.source, "shared": self.shared}
 
     @classmethod
     def from_item(cls, item: dict) -> "Staged":
         return cls(item["kind"], Path(item["path"]) if item["path"] else None, item.get("mime", "image/png"),
-                   item.get("size_bytes", 0), [(Path(p), s) for p, s in item.get("frames", [])])
+                   item.get("size_bytes", 0), [(Path(p), s) for p, s in item.get("frames", [])],
+                   item.get("source"), item.get("shared", False))
 
     def delete(self) -> None:
+        if self.shared:
+            return  # an upload is stored under its content hash and may be in use elsewhere
         for f in self.files():
             try:
                 os.unlink(f)
@@ -71,7 +77,7 @@ def initial_tags(repo_cfg, prefill: Optional[dict] = None) -> list:
 
 def describe(staged: list) -> str:
     """'2 images, 1 video' for the control window."""
-    names = {"image": "image", "video": "video", "animated": "GIF", "frames": "frame set"}
+    names = {"image": "image", "video": "video", "animated": "GIF", "frames": "frame set", "file": "file"}
     counts: dict = {}
     for s in staged:
         counts[s.kind] = counts.get(s.kind, 0) + 1
@@ -121,6 +127,31 @@ class LiveSession:
         self.staged.append(Staged(result.kind, Path(result.path) if result.path else None, result.mime,
                                   result.size_bytes, [(Path(p), s) for p, s in result.frames]))
         self.message = ""
+
+    def upload_images(self, paths) -> list[str]:
+        """Stage existing image files picked from disk (validated and copied into the store, as
+        `attach --image` does). Returns one message per file that was refused."""
+        return self._upload(paths, "image", ingest.import_local)
+
+    def upload_files(self, paths) -> list[str]:
+        """Stage files of any type picked from disk (copied into the store, as `attach --file`
+        does). Returns one message per file that was refused."""
+        return self._upload(paths, "file", ingest.import_local_file)
+
+    def _upload(self, paths, kind: str, import_one) -> list[str]:
+        if self.state is not LiveState.READY:
+            return ["finish the current step first"]
+        errors = []
+        for raw in paths:
+            try:
+                stored = import_one(Path(raw))
+            except ServiceError as exc:
+                errors.append(f"{Path(raw).name}: {exc.message}")
+                continue
+            self.staged.append(Staged(kind, stored.abs_path, stored.mime, stored.size_bytes,
+                                      source=Path(raw).name, shared=True))
+        self.message = ""
+        return errors
 
     def remove_staged(self, index: int) -> None:
         if self.state is LiveState.READY and 0 <= index < len(self.staged):
@@ -271,6 +302,8 @@ class LiveSession:
             s = _into_store(s)
             if s.kind == "image":
                 added.append(service.attach_captured(store, report_id, str(s.path)))
+            elif s.kind == "file":
+                added.append(service.attach_stored_file(store, report_id, str(s.path), source=s.source or "uploaded"))
             else:
                 _, media = service.add_recording(
                     store, report_id, str(s.path) if s.path else None, s.kind, s.mime, s.size_bytes,
@@ -286,7 +319,7 @@ def _into_store(s: Staged) -> Staged:
     root = drafts_dir()
     if not any(f.parent == root for f in s.files()):
         return s
-    base = images_dir() if s.kind == "image" else media_dir()
+    base = {"image": images_dir, "file": files_dir}.get(s.kind, media_dir)()
     stem = uuid.uuid4().hex
     path = None
     if s.path:
@@ -297,4 +330,4 @@ def _into_store(s: Staged) -> Staged:
         folder.mkdir(parents=True, exist_ok=True)
         for n, (p, size) in enumerate(s.frames, start=1):
             frames.append((Path(shutil.move(str(p), folder / f"frame-{n:03d}.png")), size))
-    return Staged(s.kind, path, s.mime, s.size_bytes, frames)
+    return Staged(s.kind, path, s.mime, s.size_bytes, frames, s.source, s.shared)

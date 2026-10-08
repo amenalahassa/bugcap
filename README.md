@@ -81,7 +81,7 @@ Or in a project's `.mcp.json`:
 ```
 
 The server exposes six tools: `list_reports`, `get_report` (returns the screenshot), `request_screenshot`,
-`pull_issues`, `attach_image` and `update_notes`. Logs go to `logs/mcp-server.log` in the data
+`pull_issues`, `attach_image`, `attach_file` and `update_notes`. Logs go to `logs/mcp-server.log` in the data
 directory, never to stdout.
 
 Ask your agent something like *"list the open bugcap reports for this repo and fix the one with
@@ -130,7 +130,7 @@ pull and sync, MCP, and where data lives per OS.
 
 Notes on the more involved behaviour:
 
-- **References.** In a note, `@i1` is image 1, `@v2` a video, `@g3` an animated GIF, `@f4` a frame set, and `@login-error` a labelled item. `#3` points at report 3 (a missing one is kept as text with a warning). Media references are validated on save, and relabelling or removing a referenced item needs `--force`.
+- **References.** In a note, `@i1` is image 1, `@v2` a video, `@g3` an animated GIF, `@f4` a frame set, `@d5` an attached file (`attach --file`, any type), and `@login-error` a labelled item. `#3` points at report 3 (a missing one is kept as text with a warning). Media references are validated on save, and relabelling or removing a referenced item needs `--force`.
 - **Repo values** (`init`, `sync`, `config repo set`) are checked for format and, with `gh`, for existence. Changing the repo identity offers to move existing reports.
 - **Media sync** over `[sync] max_upload_mb` (default 25) is skipped with a warning.
 

@@ -13,3 +13,4 @@ build/
 .vscode/
 .idea/
 tests/fixtures/v1.db
+.bugcap.toml
