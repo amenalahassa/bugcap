@@ -16,6 +16,7 @@
 - Missing report ID errors now suggest `bugcap list --all` to find report IDs.
 - Windows: `bugcap setup` and `bugcap live` re-sync `PATH` from the registry before detecting a capture tool, so a tool installed via `winget`/`scoop`/`choco` is picked up without restarting the terminal. `bugcap setup` also double-checks detection after installing instead of assuming a zero exit code means the tool is now usable, and says so if a restart is still needed.
 - `bugcap show`/`list`/etc. no longer crash with `UnicodeEncodeError` on a narrow console codepage (e.g. Windows cp1252) when a report's title or notes contain a character the codepage can't render.
+- `bugcap mcp-serve`'s "needs the 'mcp' extra" error now names the interpreter it's actually running from, since a stale `bugcap` shim from an earlier `pip install -e .`/`uv tool install`/`pipx install` can silently keep shadowing a later `pipx install 'bugcap[mcp]'` (pipx then warns "File exists ... Not modifying." instead of fixing it), leaving the same error even after reinstalling.
 
 ## 0.5.1 - 2026-10-05
 
