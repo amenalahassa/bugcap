@@ -56,6 +56,9 @@ def _fake_run_writing(dest_index: int):
 
 def test_capture_flameshot(bugcap_home, monkeypatch):
     monkeypatch.setattr(backends, "detect", lambda: backends.by_name("flameshot"))
+    # Isolate from whatever is actually resolvable (PATH or Windows fallback dirs) on the
+    # machine running this test -- that's `backends.resolve`'s own job, covered separately.
+    monkeypatch.setattr(backends, "resolve", lambda name: None)
     run = _fake_run_writing(-1)  # flameshot gui --path <dest>
     monkeypatch.setattr(capture.subprocess, "run", run)
     dest = capture.capture_screenshot()
@@ -63,8 +66,23 @@ def test_capture_flameshot(bugcap_home, monkeypatch):
     assert run.calls[0][0] == "flameshot"
 
 
+def test_capture_flameshot_uses_resolved_path(bugcap_home, monkeypatch, tmp_path):
+    """When flameshot is only reachable via the Windows fallback (bugcap report #1), capture
+    must launch it by that resolved path, not the bare name which would just fail to spawn."""
+    monkeypatch.setattr(backends, "detect", lambda: backends.by_name("flameshot"))
+    exe = tmp_path / "flameshot.exe"
+    exe.write_text("")
+    monkeypatch.setattr(backends, "resolve", lambda name: str(exe) if name == "flameshot" else None)
+    run = _fake_run_writing(-1)
+    monkeypatch.setattr(capture.subprocess, "run", run)
+    dest = capture.capture_screenshot()
+    assert dest.exists()
+    assert run.calls[0][0] == str(exe)
+
+
 def test_capture_screencapture(bugcap_home, monkeypatch):
     monkeypatch.setattr(backends, "detect", lambda: backends.by_name("screencapture"))
+    monkeypatch.setattr(backends, "resolve", lambda name: None)
     run = _fake_run_writing(-1)  # screencapture -i <dest>
     monkeypatch.setattr(capture.subprocess, "run", run)
     dest = capture.capture_screenshot()
@@ -74,6 +92,7 @@ def test_capture_screencapture(bugcap_home, monkeypatch):
 
 def test_capture_satty(bugcap_home, monkeypatch):
     monkeypatch.setattr(backends, "detect", lambda: backends.by_name("satty"))
+    monkeypatch.setattr(backends, "resolve", lambda name: None)
 
     def run(argv, *a, **k):
         from pathlib import Path

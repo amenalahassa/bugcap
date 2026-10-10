@@ -52,16 +52,23 @@ def capture_screenshot() -> Path:
     dest = images_dir() / f"{uuid.uuid4()}.png"
 
     if backend.name == "flameshot":
+        exe = backends.resolve("flameshot") or "flameshot"
         result = subprocess.run(
-            ["flameshot", "gui", "--path", str(dest)], capture_output=True, text=True
+            [exe, "gui", "--path", str(dest)], capture_output=True, text=True
         )
         if result.returncode != 0:
             raise CaptureError(f"flameshot exited with {result.returncode}: {result.stderr}")
     elif backend.name == "satty":
         raw = images_dir() / f"{uuid.uuid4()}-raw.png"
-        subprocess.run(["grim", str(raw)], check=True)
+        subprocess.run([backends.resolve("grim") or "grim", str(raw)], check=True)
         result = subprocess.run(
-            ["satty", "--filename", str(raw), "--output-filename", str(dest)],
+            [
+                backends.resolve("satty") or "satty",
+                "--filename",
+                str(raw),
+                "--output-filename",
+                str(dest),
+            ],
             capture_output=True,
             text=True,
         )
@@ -70,7 +77,8 @@ def capture_screenshot() -> Path:
             raise CaptureError(f"satty exited with {result.returncode}: {result.stderr}")
     elif backend.name == "screencapture":
         # -i interactive region/window selection (space toggles window mode)
-        result = subprocess.run(["screencapture", "-i", str(dest)], capture_output=True, text=True)
+        exe = backends.resolve("screencapture") or "screencapture"
+        result = subprocess.run([exe, "-i", str(dest)], capture_output=True, text=True)
         if result.returncode != 0:
             raise CaptureError(f"screencapture exited with {result.returncode}: {result.stderr}")
     else:  # pragma: no cover
