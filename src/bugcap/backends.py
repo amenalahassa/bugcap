@@ -4,6 +4,7 @@ import shutil
 import subprocess
 import sys
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Optional
 
 
@@ -15,10 +16,80 @@ def platform_key() -> str:
     return "linux"
 
 
+# Windows binaries known to install outside PATH with no fallback shim: their installer is a
+# plain MSI/WiX package with no winget "Commands" entry, so neither the installer nor winget
+# ever registers them on PATH (unlike scoop/choco, which always add their own shim dir, or
+# winget's own "portable" installer type, which winget manages the PATH entry for itself).
+# Checked against this project's other backends: satty/grim/wf-recorder are Linux-only and
+# screencapture is macOS-only, so this table only needs Windows-only entries.
+_WINDOWS_FALLBACK_DIRS: dict[str, list[tuple[str, ...]]] = {
+    "flameshot": [("Flameshot", "bin")],
+}
+
+
+def _windows_fallback_candidates(name: str) -> list[Path]:
+    # Path parts, not a single string: on CI, tests simulate "windows" by monkeypatching
+    # sys.platform while pathlib.Path stays bound to the real (often POSIX) OS, which would
+    # treat a literal "Flameshot\bin" as one oddly-named component instead of two.
+    rel_parts_list = _WINDOWS_FALLBACK_DIRS.get(name, [])
+    roots = [os.environ.get("ProgramFiles"), os.environ.get("ProgramFiles(x86)")]
+    return [Path(root, *rel_parts) for root in roots if root for rel_parts in rel_parts_list]
+
+
+def resolve(name: str) -> Optional[str]:
+    """Full path to the `name` executable: PATH first, then (on Windows) known install
+    locations for binaries whose installer never touches PATH. Use this instead of
+    `shutil.which` directly so a capture/record backend can actually be launched, not just
+    detected.
+    """
+    found = shutil.which(name)
+    if found:
+        return found
+    if platform_key() != "windows":
+        return None
+    for directory in _windows_fallback_candidates(name):
+        candidate = directory / f"{name}.exe"
+        if candidate.is_file():
+            return str(candidate)
+    return None
+
+
+def ensure_on_user_path(name: str) -> None:
+    """If `name` was only found via a fallback install location (not already on PATH),
+    persist that directory to the user's PATH registry so later shells and tools - not just
+    bugcap - can find it without needing the fallback. Best-effort: any failure is silent,
+    since `resolve()` already makes bugcap itself work without this.
+    """
+    if platform_key() != "windows" or shutil.which(name):
+        return
+    resolved = resolve(name)
+    if not resolved:
+        return
+    directory = str(Path(resolved).parent)
+    try:
+        import winreg
+
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER, "Environment", 0, winreg.KEY_READ | winreg.KEY_SET_VALUE
+        ) as key:
+            try:
+                current, kind = winreg.QueryValueEx(key, "Path")
+            except FileNotFoundError:
+                current, kind = "", winreg.REG_EXPAND_SZ
+            parts = [p for p in current.split(os.pathsep) if p]
+            if any(p.lower() == directory.lower() for p in parts):
+                return
+            parts.append(directory)
+            winreg.SetValueEx(key, "Path", 0, kind, os.pathsep.join(parts))
+        os.environ["PATH"] = os.environ.get("PATH", "") + os.pathsep + directory
+    except OSError:
+        pass
+
+
 @dataclass
 class Backend:
     name: str
-    binaries: list[str]  # every one must be on PATH
+    binaries: list[str]  # every one must be resolvable (PATH, or a known fallback location)
     description: str
     platforms: tuple[str, ...]
     annotates: bool
@@ -29,7 +100,7 @@ class Backend:
     def available(self) -> bool:
         if platform_key() not in self.platforms:
             return False
-        return all(shutil.which(b) for b in self.binaries)
+        return all(resolve(b) for b in self.binaries)
 
 
 BACKENDS = [
