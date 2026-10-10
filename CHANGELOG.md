@@ -10,6 +10,9 @@
 - The store schema moves to version 3 (the `media` table accepts the new `file` kind); existing databases migrate on first open.
 - Attached files are served by the dashboard as downloads and are never uploaded by `sync`.
 
+### Fixed
+- Missing report ID errors now suggest `bugcap list --all` to find report IDs.
+
 ## 0.5.1 - 2026-10-05
 
 ### Added
