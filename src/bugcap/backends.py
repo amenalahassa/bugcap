@@ -22,15 +22,18 @@ def platform_key() -> str:
 # winget's own "portable" installer type, which winget manages the PATH entry for itself).
 # Checked against this project's other backends: satty/grim/wf-recorder are Linux-only and
 # screencapture is macOS-only, so this table only needs Windows-only entries.
-_WINDOWS_FALLBACK_DIRS: dict[str, list[str]] = {
-    "flameshot": [r"Flameshot\bin"],
+_WINDOWS_FALLBACK_DIRS: dict[str, list[tuple[str, ...]]] = {
+    "flameshot": [("Flameshot", "bin")],
 }
 
 
 def _windows_fallback_candidates(name: str) -> list[Path]:
-    rel_dirs = _WINDOWS_FALLBACK_DIRS.get(name, [])
+    # Path parts, not a single string: on CI, tests simulate "windows" by monkeypatching
+    # sys.platform while pathlib.Path stays bound to the real (often POSIX) OS, which would
+    # treat a literal "Flameshot\bin" as one oddly-named component instead of two.
+    rel_parts_list = _WINDOWS_FALLBACK_DIRS.get(name, [])
     roots = [os.environ.get("ProgramFiles"), os.environ.get("ProgramFiles(x86)")]
-    return [Path(root) / rel for root in roots if root for rel in rel_dirs]
+    return [Path(root, *rel_parts) for root in roots if root for rel_parts in rel_parts_list]
 
 
 def resolve(name: str) -> Optional[str]:
