@@ -1,7 +1,6 @@
 """T011: backend detection, recommendation, install-command and guidance per simulated OS."""
 
 import pytest
-
 from bugcap import backends
 
 
@@ -74,3 +73,54 @@ def test_guidance_per_os(monkeypatch, platform):
     monkeypatch.setattr(backends.sys, "platform", platform)
     text = backends.guidance(backends.by_name("flameshot"))
     assert text and "flameshot" in text.lower()
+
+
+def test_sync_path_from_registry_is_noop_off_windows(monkeypatch):
+    monkeypatch.setattr(backends.sys, "platform", "linux")
+    before = backends.os.environ.get("PATH")
+    backends._sync_path_from_registry()
+    assert backends.os.environ.get("PATH") == before
+
+
+def test_sync_path_from_registry_merges_and_dedupes(monkeypatch):
+    """A tool winget just installed updates the registry's PATH, but this already-running
+    process keeps its stale PATH until re-synced -- which is why `bugcap live` could say
+    "No capture tool found" right after `bugcap setup` had just installed flameshot."""
+    import winreg
+
+    monkeypatch.setattr(backends.sys, "platform", "win32")
+    monkeypatch.setenv("PATH", r"C:\Existing")
+
+    class FakeKey:
+        def __init__(self, value):
+            self.value = value
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    def fake_open_key(hive, subkey):
+        if hive == winreg.HKEY_CURRENT_USER:
+            return FakeKey(r"C:\NewTool;C:\Existing")
+        raise OSError("not simulated")
+
+    monkeypatch.setattr(winreg, "OpenKey", fake_open_key)
+    monkeypatch.setattr(winreg, "QueryValueEx", lambda key, name: (key.value, 1))
+
+    backends._sync_path_from_registry()
+
+    parts = backends.os.environ["PATH"].split(backends.os.pathsep)
+    assert parts.count(r"C:\Existing") == 1  # deduped, not doubled
+    assert r"C:\NewTool" in parts
+
+
+def test_sync_path_from_registry_survives_registry_errors(monkeypatch):
+    import winreg
+
+    monkeypatch.setattr(backends.sys, "platform", "win32")
+    monkeypatch.setenv("PATH", r"C:\Existing")
+    monkeypatch.setattr(winreg, "OpenKey", lambda hive, subkey: (_ for _ in ()).throw(OSError("denied")))
+    backends._sync_path_from_registry()  # must not raise
+    assert backends.os.environ["PATH"] == r"C:\Existing"

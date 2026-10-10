@@ -5,6 +5,8 @@
 ### Added
 - Attach files of any type to a report: `bugcap attach <id> --file SRC [--file-label L]` (paths, globs or URLs, repeatable) and the `attach_file` MCP tool. Notes refer to them as `@d1`, `@d2` or by label.
 - Live mode: **Upload image...** and **Attach file...** buttons stage files picked from disk, for a new bug or an existing one.
+- Live mode: the new-bug form's **Repo** field is now a picker listing every repo you've run `bugcap init` in, so a report can be filed against a different project than the one `live` was launched from.
+- Docs: a "Windows notes" section in the usage guide covering the `pipx`/`winget` install path, where data and config live, the `ffmpeg` recorder requirement, and the PATH-refresh quirk below.
 
 ### Changed
 - The store schema moves to version 3 (the `media` table accepts the new `file` kind); existing databases migrate on first open.
@@ -12,6 +14,8 @@
 
 ### Fixed
 - Missing report ID errors now suggest `bugcap list --all` to find report IDs.
+- Windows: `bugcap setup` and `bugcap live` re-sync `PATH` from the registry before detecting a capture tool, so a tool installed via `winget`/`scoop`/`choco` is picked up without restarting the terminal. `bugcap setup` also double-checks detection after installing instead of assuming a zero exit code means the tool is now usable, and says so if a restart is still needed.
+- `bugcap show`/`list`/etc. no longer crash with `UnicodeEncodeError` on a narrow console codepage (e.g. Windows cp1252) when a report's title or notes contain a character the codepage can't render.
 
 ## 0.5.1 - 2026-10-05
 

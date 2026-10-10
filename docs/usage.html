@@ -35,6 +35,7 @@
     <a href="#github">GitHub</a>
     <a href="#mcp">Agents (MCP)</a>
     <a href="#data">Where data lives</a>
+    <a href="#windows">Windows notes</a>
   </aside>
 
   <main>
@@ -101,7 +102,7 @@ bugcap images &lt;id&gt; remove 2 --force             # rewrites @ references in
     <ul>
       <li><strong>Screenshot</strong> and <strong>Record</strong> (then <strong>Stop</strong>) each add a capture to a staged set. Stage as many images and videos as you like, in any mix.</li>
       <li><strong>Upload image...</strong> and <strong>Attach file...</strong> open a file picker (several files at once) and stage what you pick, exactly like <code>attach --image</code> and <code>attach --file</code>. Images are checked; files can be of any type and are referred to as <code>@d1</code>, <code>@d2</code>, and so on.</li>
-      <li><strong>New bug from N items</strong> turns the staged set into one report; refer to the items in the notes with <code>@i1</code>, <code>@v2</code>, and so on.</li>
+      <li><strong>New bug from N items</strong> turns the staged set into one report; refer to the items in the notes with <code>@i1</code>, <code>@v2</code>, and so on. The form's <strong>Repo</strong> field defaults to the launch repo but can be switched to any repo you've already run <code>bugcap init</code> in.</li>
       <li><strong>Add to existing bug</strong> attaches the staged set, plus an optional note, to a bug you already filed.</li>
       <li><strong>New bug (note only)</strong> files a bug with no media: a title, a note and optional tags.</li>
       <li>Closing with staged captures or typed text offers to keep them as a draft, restored the next time you start live mode.</li>
@@ -185,6 +186,16 @@ bugcap dashboard --port 0               # pick a free port</code></pre>
       <tr><td>Windows</td><td><code>%LOCALAPPDATA%\bugcap</code></td><td><code>%APPDATA%\bugcap</code></td></tr>
     </table>
     <p>Set <code>BUGCAP_HOME</code> to move both. Reinstalling bugcap never touches your data. Schema changes are migrated in place.</p>
+
+    <h2 id="windows">Windows notes</h2>
+    <p>bugcap is fully supported on Windows; this section covers the install path and a couple of platform quirks.</p>
+<pre><code>pipx install 'bugcap[mcp]'
+bugcap setup --yes        # detects flameshot, or installs it with winget
+cd C:\code\myproj &amp;&amp; bugcap init</code></pre>
+    <p><code>bugcap setup</code> installs <a href="https://flameshot.org/">flameshot</a> through <code>winget</code> (or <code>scoop</code>/<code>choco</code> if you use one of those instead). Recording needs <code>ffmpeg</code> on PATH; without it, <code>record</code> and live mode's <strong>Record</strong> button report that no recorder was found, but screenshots and note-only bugs still work.</p>
+    <p>Data lives in <code>%LOCALAPPDATA%\bugcap</code>, config in <code>%APPDATA%\bugcap</code> (see <a href="#data">Where data lives</a>).</p>
+    <div class="callout"><strong>Just installed a capture tool?</strong> Windows updates <code>PATH</code> for new processes, but an already-open terminal keeps its old one. <code>bugcap setup</code> re-checks after installing and tells you if a restart is still needed; if <code>bugcap live</code> says "No capture tool found" right after a fresh install, close and reopen your terminal and try again.</div>
+    <p><code>bugcap live</code> needs tkinter, which ships with the standard python.org installer; it's fine out of the box with <code>pipx</code>/<code>uv tool install</code>.</p>
   </main>
 </div>
 

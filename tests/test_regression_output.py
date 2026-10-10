@@ -3,10 +3,11 @@
 The expected strings below are the exact pre-feature formats; the test fails if any
 scoping/repo change leaks into output when there is no .bugcap.toml in scope."""
 
-from fixtures.make_images import png_bytes
+import io
 
 from bugcap import cli
 from bugcap.store import Store
+from fixtures.make_images import png_bytes
 
 
 def test_capture_output_unchanged(bugcap_home, tmp_path, monkeypatch, capsys):
@@ -48,3 +49,17 @@ def test_show_output_unchanged(bugcap_home, tmp_path, monkeypatch, capsys):
         f"    (not synced to any tracker yet)\n"
     )
     assert out == expected  # no `repo:` line when repo is unset
+
+
+def test_show_survives_narrow_console_encoding(bugcap_home, tmp_path, monkeypatch):
+    """Bug report #1: `bugcap show` crashed with UnicodeEncodeError on a Windows console
+    (cp1252) when a report's notes held a character the codepage can't render, such as an
+    emoji pasted from a screenshot annotation. `main()` must widen the stream instead of
+    letting a bare `print()` blow up the command."""
+    with Store() as store:
+        r = store.add("Title", notes="can't launch it \U0001f5a5️, capture fails")
+    monkeypatch.chdir(tmp_path)
+    narrow = io.TextIOWrapper(io.BytesIO(), encoding="cp1252", errors="strict")
+    monkeypatch.setattr(cli.sys, "stdout", narrow)
+    monkeypatch.setattr(cli.sys, "stderr", narrow)
+    assert cli.main(["show", str(r.id)]) == 0

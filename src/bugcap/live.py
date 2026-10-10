@@ -76,6 +76,7 @@ class _App:
         self.results: "queue.Queue" = queue.Queue()
         self.details = None
         self.widgets: dict = {}
+        self.repo_choices: list = []
         self.pending_drafts: list = []
         self.stop_recording = threading.Event()
         self.record_started = 0.0
@@ -415,8 +416,20 @@ class _App:
         w["status"].set(prefill.get("status", "open"))
         w["status"].grid(row=3, column=1, sticky="w", pady=4)
         ttk.Label(form, text="Repo", style="Heading.TLabel").grid(row=4, column=0, sticky="w", padx=(0, 12), pady=4)
-        ttk.Label(form, text=(self.cfg.key if self.cfg else "(none)"), style="Muted.TLabel").grid(
-            row=4, column=1, sticky="w", pady=4)
+        self.repo_choices = repo.known_repos()
+        if self.cfg is not None and all(c.root != self.cfg.root for c in self.repo_choices):
+            self.repo_choices.append(self.cfg)
+        if self.repo_choices:
+            current_key = self.cfg.key if self.cfg else ""
+            w["repo"] = ttk.Combobox(
+                form, values=[c.key for c in self.repo_choices], state="readonly", width=30,
+            )
+            w["repo"].set(current_key)
+            w["repo"].grid(row=4, column=1, sticky="w", pady=4)
+            w["repo"].bind("<<ComboboxSelected>>", self.on_repo_change)
+        else:
+            ttk.Label(form, text="(none - run `bugcap init` in a repo to tag reports)",
+                      style="Muted.TLabel").grid(row=4, column=1, sticky="w", pady=4)
         row += 1
         w["error"] = ttk.Label(frame, text="", style="Error.TLabel", wraplength=420)
         w["error"].grid(row=row, column=0, columnspan=2, sticky="w", pady=(6, 0))
@@ -430,6 +443,24 @@ class _App:
         self.place_beside_control(win)
         w["title"].focus_set()
         self.check_notes()
+
+    def on_repo_change(self, _event=None) -> None:
+        """The details form's repo picker changed: this report (and its auto tag) now
+        belongs to the newly-selected repo instead of the one `live` launched in."""
+        selected_key = self.widgets["repo"].get()
+        match = next((c for c in self.repo_choices if c.key == selected_key), None)
+        if match is None:
+            return
+        previous = self.cfg
+        self.cfg = self.session.repo_cfg = match
+        tags_entry = self.widgets["tags"]
+        current_tags = [t.strip() for t in tags_entry.get().split(",") if t.strip()]
+        if previous is not None and previous.tag in current_tags and previous.tag != match.tag:
+            current_tags = [match.tag if t == previous.tag else t for t in current_tags]
+        elif match.tag not in current_tags:
+            current_tags.append(match.tag)
+        tags_entry.delete(0, "end")
+        tags_entry.insert(0, ", ".join(current_tags))
 
     def fields(self) -> dict:
         w = self.widgets
