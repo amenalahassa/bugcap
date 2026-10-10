@@ -1,8 +1,12 @@
 """T011: backend detection, recommendation, install-command and guidance per simulated OS."""
 
+import sys
+
 import pytest
 
 from bugcap import backends
+
+_needs_winreg = pytest.mark.skipif(sys.platform != "win32", reason="winreg is a Windows-only stdlib module")
 
 
 @pytest.mark.parametrize(
@@ -83,6 +87,7 @@ def test_sync_path_from_registry_is_noop_off_windows(monkeypatch):
     assert backends.os.environ.get("PATH") == before
 
 
+@_needs_winreg
 def test_sync_path_from_registry_merges_and_dedupes(monkeypatch):
     """A tool winget just installed updates the registry's PATH, but this already-running
     process keeps its stale PATH until re-synced -- which is why `bugcap live` could say
@@ -117,6 +122,7 @@ def test_sync_path_from_registry_merges_and_dedupes(monkeypatch):
     assert r"C:\NewTool" in parts
 
 
+@_needs_winreg
 def test_sync_path_from_registry_survives_registry_errors(monkeypatch):
     import winreg
 
