@@ -24,7 +24,10 @@ def resolve_report(store: Store, report_id: int):
     """Return the report, or print the standard not-found error and return None."""
     report = store.get(report_id)
     if report is None:
-        print(f"error: no report with id {report_id}", file=sys.stderr)
+        print(
+            f"error: no report with id {report_id}; run `bugcap list --all` to see report ids",
+            file=sys.stderr,
+        )
     return report
 
 

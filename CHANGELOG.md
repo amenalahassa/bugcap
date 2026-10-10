@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- Missing report ID errors now suggest `bugcap list --all` to find report IDs.
+
 ## 0.5.1 - 2026-10-05
 
 ### Added

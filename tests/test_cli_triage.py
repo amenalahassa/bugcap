@@ -38,7 +38,10 @@ def test_edit_empty_title_rejected(bugcap_home):
 
 def test_edit_unknown_id(bugcap_home, capsys):
     assert cli.main(["edit", "999", "--status", "open"]) == 1
-    assert "no report with id 999" in capsys.readouterr().err
+    captured = capsys.readouterr()
+    assert "no report with id 999" in captured.err
+    assert "run `bugcap list --all` to see report ids" in captured.err
+    assert captured.out == ""
 
 
 def test_tag_add_idempotent_and_remove(bugcap_home, capsys):
