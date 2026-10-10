@@ -158,18 +158,22 @@ class _App:
         self.shot_button.grid(row=1, column=0, sticky="ew", pady=(10, 0), padx=(0, 4))
         self.record_button = ttk.Button(frame, text="Record", command=self.on_record)
         self.record_button.grid(row=1, column=1, sticky="ew", pady=(10, 0), padx=(4, 0))
+        self.upload_button = ttk.Button(frame, text="Upload image...", command=self.on_upload_image)
+        self.upload_button.grid(row=2, column=0, sticky="ew", pady=(6, 0), padx=(0, 4))
+        self.file_button = ttk.Button(frame, text="Attach file...", command=self.on_upload_file)
+        self.file_button.grid(row=2, column=1, sticky="ew", pady=(6, 0), padx=(4, 0))
         self.staged_label = ttk.Label(frame, text="", style="Heading.TLabel", wraplength=230)
-        self.staged_label.grid(row=2, column=0, sticky="w", pady=(12, 0))
+        self.staged_label.grid(row=3, column=0, sticky="w", pady=(12, 0))
         self.clear_button = ttk.Button(frame, text="Clear", command=self.on_clear)
-        self.clear_button.grid(row=2, column=1, sticky="e", pady=(12, 0))
+        self.clear_button.grid(row=3, column=1, sticky="e", pady=(12, 0))
         self.new_button = ttk.Button(frame, text="New bug (note only)", command=self.on_new)
-        self.new_button.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        self.new_button.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(6, 0))
         self.existing_button = ttk.Button(frame, text="Add to existing bug...", command=self.on_existing)
-        self.existing_button.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        self.existing_button.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(6, 0))
         self.counter = ttk.Label(frame, text="0 saved this session", style="Muted.TLabel")
-        self.counter.grid(row=5, column=0, columnspan=2, pady=(10, 0), sticky="w")
+        self.counter.grid(row=6, column=0, columnspan=2, pady=(10, 0), sticky="w")
         self.status = ttk.Label(frame, text=notice, wraplength=230, style="Warning.TLabel")
-        self.status.grid(row=6, column=0, columnspan=2, pady=(4, 0), sticky="w")
+        self.status.grid(row=7, column=0, columnspan=2, pady=(4, 0), sticky="w")
         root.protocol("WM_DELETE_WINDOW", self.on_close_control)
         self.refresh()
         self.anchor_control()
@@ -197,6 +201,8 @@ class _App:
         else:
             self.clear_button.grid_remove()
             self.new_button.configure(text="New bug (note only)")
+        self.upload_button.state(["!disabled"] if ready else ["disabled"])
+        self.file_button.state(["!disabled"] if ready else ["disabled"])
         self.clear_button.state(["!disabled"] if ready else ["disabled"])
         self.new_button.state(["!disabled"] if ready else ["disabled"])
         self.existing_button.state(["!disabled"] if ready else ["disabled"])
@@ -230,6 +236,29 @@ class _App:
 
         threading.Thread(target=worker, daemon=True).start()
         self.root.after(100, self._poll)
+
+    # --- uploads ---------------------------------------------------------------
+
+    def on_upload_image(self) -> None:
+        self._pick_and_stage("Choose image(s)", self.session.upload_images, [
+            ("Images", "*.png *.jpg *.jpeg *.gif *.webp"), ("All files", "*.*")])
+
+    def on_upload_file(self) -> None:
+        self._pick_and_stage("Choose file(s) to attach", self.session.upload_files, [("All files", "*.*")])
+
+    def _pick_and_stage(self, title: str, stage, filetypes) -> None:
+        from tkinter import filedialog, messagebox
+
+        if self.session.state is not LiveState.READY:
+            return
+        paths = filedialog.askopenfilenames(title=title, parent=self.root, filetypes=filetypes)
+        if not paths:
+            return
+        errors = stage(paths)
+        self.refresh()
+        if errors:
+            messagebox.showerror("Not added", "\n".join(errors), parent=self.root)
+        self.set_status("Staged. Add more, or file a bug." if self.session.staged else "")
 
     # --- recording -------------------------------------------------------------
 

@@ -1,7 +1,8 @@
 """References in notes.
 
 `@` points at media, by kind letter and its number in the report: `@i3` image, `@v2` video,
-`@g4` animated GIF, `@f5` keyframes. `@login-error` is a media label and `@@` a literal `@`.
+`@g4` animated GIF, `@f5` keyframes, `@d6` attached file (document). `@login-error` is a media
+label and `@@` a literal `@`.
 The older `@3` form still reads as media 3, so existing notes keep working.
 
 `#N` points at report N (soft: an unknown number is kept as text and reported as a warning).
@@ -19,10 +20,10 @@ from .errors import ServiceError
 
 REMOVED_TEXT = "[image removed]"
 LABEL_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_\-]*$")
-MEDIA_LETTERS = {"image": "i", "video": "v", "animated": "g", "frames": "f"}
+MEDIA_LETTERS = {"image": "i", "video": "v", "animated": "g", "frames": "f", "file": "d"}
 # `v2`, `G4`, ...: a kind letter and a number. Labels may not look like this (see service.validate_label).
-INDEX_RE = re.compile(r"^([ivgfIVGF])([1-9][0-9]*)$")
-RESERVED_LABEL_RE = re.compile(r"^[ivgfIVGF][0-9]+$")  # any kind letter + digits, even i0
+INDEX_RE = re.compile(r"^([ivgfdIVGFD])([1-9][0-9]*)$")
+RESERVED_LABEL_RE = re.compile(r"^[ivgfdIVGFD][0-9]+$")  # any kind letter + digits, even i0
 _LEGACY_INDEX_RE = re.compile(r"^([1-9][0-9]*)$")
 _REPORT_RE = re.compile(r"(?:^|(?<=[\s(\[]))#([1-9][0-9]*)(?![\w\-])", re.M)
 _REF_RE = re.compile(r"@@|(?<![\w.%+\-])@([A-Za-z0-9_\-]+)(?![\w\-])")

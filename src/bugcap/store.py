@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import mimetypes
 import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -10,9 +11,9 @@ from typing import Optional
 
 from .paths import absolute_stored_path, db_path, to_data_relative
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
-MEDIA_KINDS = ("image", "video", "frames", "animated")
+MEDIA_KINDS = ("image", "video", "frames", "animated", "file")
 
 _MIME = {
     ".png": "image/png",
@@ -27,7 +28,13 @@ _MIME = {
 
 
 def guess_mime(path) -> str:
-    return _MIME.get(Path(str(path)).suffix.lower(), "application/octet-stream")
+    """Mime type by extension: the small table above for the formats bugcap itself produces,
+    then the standard library's broader guesser (covers PDFs, archives, office docs, ...)."""
+    suffix = Path(str(path)).suffix.lower()
+    if suffix in _MIME:
+        return _MIME[suffix]
+    guessed, _ = mimetypes.guess_type(str(path))
+    return guessed or "application/octet-stream"
 
 
 # Added in schema version 2 (created by _migrate for fresh and upgraded databases).
@@ -37,7 +44,7 @@ CREATE TABLE IF NOT EXISTS media (
     report_id INTEGER NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
     idx INTEGER NOT NULL CHECK (idx >= 1),
     label TEXT,
-    kind TEXT NOT NULL CHECK (kind IN ('image','video','frames','animated')),
+    kind TEXT NOT NULL CHECK (kind IN ('image','video','frames','animated','file')),
     path TEXT,
     mime TEXT NOT NULL,
     size_bytes INTEGER NOT NULL DEFAULT 0,
@@ -203,6 +210,9 @@ class Store:
         if version >= SCHEMA_VERSION:
             return
         columns = {r["name"] for r in self._conn.execute("PRAGMA table_info(reports)")}
+        # Rebuilding `media` (v3) must not cascade into media_frames; the pragma is a no-op
+        # inside a transaction, so it is switched off here and restored below.
+        self._conn.execute("PRAGMA foreign_keys = OFF")
         try:
             self._conn.execute("BEGIN")
             if version < 1:
@@ -212,11 +222,35 @@ class Store:
                     self._conn.execute("ALTER TABLE reports ADD COLUMN body TEXT NOT NULL DEFAULT ''")
             if version < 2:
                 self._migrate_media()
+            if version < 3:
+                self._migrate_file_kind()
             self._conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
             self._conn.execute("COMMIT")
         except Exception:
             self._conn.execute("ROLLBACK")
             raise
+        finally:
+            self._conn.execute("PRAGMA foreign_keys = ON")
+
+    def _migrate_file_kind(self) -> None:
+        """v2 -> v3: allow the 'file' media kind. SQLite cannot alter a CHECK constraint, so
+        the table is rebuilt (rows keep their ids; media_frames keeps pointing at them)."""
+        row = self._conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='media'").fetchone()
+        if row is None or "'file'" in (row["sql"] or ""):
+            return
+        statements = [s for s in MEDIA_SCHEMA.split(";") if s.strip()]
+        create = next(s for s in statements if "CREATE TABLE IF NOT EXISTS media (" in s)
+        self._conn.execute(create.replace("IF NOT EXISTS media (", "media_new (", 1))
+        self._conn.execute(
+            "INSERT INTO media_new (id, report_id, idx, label, kind, path, mime, size_bytes, source, created_at) "
+            "SELECT id, report_id, idx, label, kind, path, mime, size_bytes, source, created_at FROM media"
+        )
+        self._conn.execute("DROP TABLE media")
+        self._conn.execute("ALTER TABLE media_new RENAME TO media")
+        self._conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS media_label_unique ON media (report_id, lower(label)) "
+            "WHERE label IS NOT NULL"
+        )
 
     def _migrate_media(self) -> None:
         """v1 -> v2: create the media tables and copy each legacy image_paths entry into them.

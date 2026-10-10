@@ -51,7 +51,7 @@ def validate_label(label: str) -> str:
     if refs.RESERVED_LABEL_RE.match(label) or label.isdigit():
         raise ServiceError(
             "invalid_label",
-            f"label {label!r} is reserved: names like i1, v2, g3, f4 or 5 are media numbers",
+            f"label {label!r} is reserved: names like i1, v2, g3, f4, d5 or 6 are media numbers",
         )
     return label
 
@@ -96,27 +96,28 @@ def _prepare(existing: list[Media], sources: list[str], labels):
     return items
 
 
-def _ingest_all(items):
+def _ingest_all(items, ingest_one=None):
+    ingest_one = ingest_one or ingest.ingest_item
     ok, rejected = [], []
     for item in items:
         try:
-            ok.append((item, ingest.ingest_item(item)))
+            ok.append((item, ingest_one(item)))
         except ServiceError as exc:
             rejected.append({"source": item.source, "reason": exc.message, "code": exc.code})
     return ok, rejected
 
 
-def add_media(store: Store, report_id: int, sources: list[str], labels=None) -> AddResult:
+def _add_stored(store: Store, report_id: int, sources, labels, kind: str, ingest_one) -> AddResult:
     report = _require(store, report_id)
     items = _prepare(report.media, sources, labels)
-    ok, rejected = _ingest_all(items)
+    ok, rejected = _ingest_all(items, ingest_one)
     result = AddResult(rejected=rejected)
     try:
         with store.transaction():
             for item, stored in ok:
                 result.added.append(
                     store.insert_media(
-                        report_id, kind="image", path=str(stored.abs_path), label=item.label,
+                        report_id, kind=kind, path=str(stored.abs_path), label=item.label,
                         mime=stored.mime, size_bytes=stored.size_bytes, source=item.source,
                     )
                 )
@@ -124,6 +125,17 @@ def add_media(store: Store, report_id: int, sources: list[str], labels=None) -> 
         _discard(s for _, s in ok)
         raise
     return result
+
+
+def add_media(store: Store, report_id: int, sources: list[str], labels=None) -> AddResult:
+    """Attach images (paths, globs, http(s) URLs); each is validated by its magic bytes."""
+    return _add_stored(store, report_id, sources, labels, "image", ingest.ingest_item)
+
+
+def add_files(store: Store, report_id: int, sources: list[str], labels=None) -> AddResult:
+    """Attach files of any type (paths, globs, http(s) URLs). They are referenced in notes
+    as `@d1`, `@d2`, ... or by label, like images."""
+    return _add_stored(store, report_id, sources, labels, "file", ingest.ingest_file_item)
 
 
 # --- reports ------------------------------------------------------------------
@@ -207,6 +219,15 @@ def attach_captured(store: Store, report_id: int, path: str, label: Optional[str
     _check_new_labels(report.media, [label])
     path = ingest.adopt(path)
     return store.insert_media(report_id, kind="image", path=str(path), label=label or None, source="captured")
+
+
+def attach_stored_file(store: Store, report_id: int, path: str, label: Optional[str] = None,
+                      source: str = "uploaded") -> Media:
+    """Attach a file already copied into the store's files directory (no copy)."""
+    report = _require(store, report_id)
+    _check_new_labels(report.media, [label])
+    path = ingest.adopt_file(path)
+    return store.insert_media(report_id, kind="file", path=str(path), label=label or None, source=source)
 
 
 def add_recording(

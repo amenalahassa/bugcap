@@ -1,10 +1,10 @@
-"""T005: store migration (user_version 0 -> 2) is lossless and idempotent."""
+"""T005: store migration (user_version 0 -> current) is lossless and idempotent."""
 import json
 import sqlite3
 
 import pytest
 
-from bugcap.store import Store
+from bugcap.store import SCHEMA_VERSION, Store
 
 LEGACY_SCHEMA = """
 CREATE TABLE reports (
@@ -49,7 +49,7 @@ def test_legacy_db_migrates_losslessly(tmp_path):
     cols = {row[1]: row for row in store._conn.execute("PRAGMA table_info(reports)")}
     assert "repo" in cols and cols["repo"][2] == "TEXT"
     assert "body" in cols and cols["body"][2] == "TEXT"
-    assert store._conn.execute("PRAGMA user_version").fetchone()[0] == 2
+    assert store._conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
     store.close()
 
 
@@ -59,7 +59,7 @@ def test_second_open_is_noop(tmp_path):
     Store(db).close()
     store = Store(db)  # reopening a migrated DB must not error or duplicate
     assert len(store.list()) == 1
-    assert store._conn.execute("PRAGMA user_version").fetchone()[0] == 2
+    assert store._conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
     store.close()
 
 
@@ -75,7 +75,7 @@ def test_half_migrated_db(tmp_path):
     store = Store(db)  # should add only `body`, without error
     cols = {row[1] for row in store._conn.execute("PRAGMA table_info(reports)")}
     assert {"repo", "body"} <= cols
-    assert store._conn.execute("PRAGMA user_version").fetchone()[0] == 2
+    assert store._conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
     store.close()
 
 
@@ -84,7 +84,7 @@ def test_fresh_db_gets_new_schema(tmp_path):
     store = Store(db)
     cols = {row[1] for row in store._conn.execute("PRAGMA table_info(reports)")}
     assert {"repo", "body"} <= cols
-    assert store._conn.execute("PRAGMA user_version").fetchone()[0] == 2
+    assert store._conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
     rep = store.add("new bug", repo="owner/repo", body="desc")
     assert rep.repo == "owner/repo"
     assert rep.body == "desc"
@@ -116,7 +116,7 @@ def test_v1_to_v2_keeps_every_report_and_column(tmp_path):
     # every original column is untouched; the only addition is the media_seq high-water mark
     assert [{k: v for k, v in r.items() if k != "media_seq"} for r in new] == old
     assert [r["media_seq"] for r in new] == [2, 0]
-    assert store._conn.execute("PRAGMA user_version").fetchone()[0] == 2
+    assert store._conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
     store.close()
 
 
@@ -223,4 +223,59 @@ def test_migrated_legacy_images_set_high_water_mark(tmp_path):
     first = store.list_media(1)
     store.delete_media(first[1].id)
     assert store.insert_media(1, path="/n.png").idx == 3
+    store.close()
+
+
+V2_MEDIA = """
+CREATE TABLE media (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    report_id INTEGER NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
+    idx INTEGER NOT NULL CHECK (idx >= 1),
+    label TEXT,
+    kind TEXT NOT NULL CHECK (kind IN ('image','video','frames','animated')),
+    path TEXT,
+    mime TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL DEFAULT 0,
+    source TEXT,
+    created_at TEXT NOT NULL,
+    UNIQUE (report_id, idx)
+);
+CREATE UNIQUE INDEX media_label_unique ON media (report_id, lower(label)) WHERE label IS NOT NULL;
+CREATE TABLE media_frames (
+    media_id INTEGER NOT NULL REFERENCES media(id) ON DELETE CASCADE,
+    frame_no INTEGER NOT NULL,
+    path TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (media_id, frame_no)
+);
+"""
+
+
+def test_v2_to_v3_allows_files_and_keeps_media_and_frames(tmp_path):
+    db = tmp_path / "v2.db"
+    conn = sqlite3.connect(db)
+    conn.executescript(LEGACY_SCHEMA)
+    conn.execute("ALTER TABLE reports ADD COLUMN repo TEXT")
+    conn.execute("ALTER TABLE reports ADD COLUMN body TEXT NOT NULL DEFAULT ''")
+    conn.execute("ALTER TABLE reports ADD COLUMN media_seq INTEGER NOT NULL DEFAULT 0")
+    conn.executescript(V2_MEDIA)
+    conn.execute("INSERT INTO reports (created_at, title, media_seq) VALUES ('2026-01-01', 'r', 2)")
+    conn.execute("INSERT INTO media (report_id, idx, label, kind, path, mime, created_at) "
+                 "VALUES (1, 1, 'shot', 'image', 'images/a.png', 'image/png', 'x')")
+    conn.execute("INSERT INTO media (report_id, idx, kind, mime, created_at) VALUES (1, 2, 'frames', 'image/png', 'x')")
+    conn.execute("INSERT INTO media_frames (media_id, frame_no, path) VALUES (2, 1, 'media/f1.png')")
+    conn.execute("PRAGMA user_version = 2")
+    conn.commit()
+    conn.close()
+
+    store = Store(db)
+    assert store._conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
+    assert store._conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+    media = store.list_media(1)
+    assert [(m.idx, m.kind, m.label) for m in media] == [(1, "image", "shot"), (2, "frames", None)]
+    assert [f.path for f in media[1].frames] == ["media/f1.png"]
+    added = store.insert_media(1, kind="file", path="/tmp/x.pdf", label="spec")
+    assert (added.idx, added.kind, added.mime) == (3, "file", "application/pdf")
+    with pytest.raises(sqlite3.IntegrityError):
+        store.insert_media(1, kind="file", path="/tmp/y.pdf", label="SPEC")  # label index survived
     store.close()
