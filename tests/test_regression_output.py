@@ -5,9 +5,10 @@ scoping/repo change leaks into output when there is no .bugcap.toml in scope."""
 
 import io
 
+from fixtures.make_images import png_bytes
+
 from bugcap import cli
 from bugcap.store import Store
-from fixtures.make_images import png_bytes
 
 
 def test_capture_output_unchanged(bugcap_home, tmp_path, monkeypatch, capsys):

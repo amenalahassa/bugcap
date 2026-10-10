@@ -3,6 +3,7 @@ import subprocess
 import types
 
 import pytest
+
 from bugcap import backends, cli, recorder
 
 

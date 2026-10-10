@@ -1,5 +1,6 @@
 """T009: repo config detection, .bugcap.toml discovery, [sync] round-trip, tomlio quoting."""
 import pytest
+
 from bugcap import repo, tomlio
 from bugcap.repo import RepoConfigError
 
