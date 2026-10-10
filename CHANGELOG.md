@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 - 2026-10-10
 
 ### Added
 - Attach files of any type to a report: `bugcap attach <id> --file SRC [--file-label L]` (paths, globs or URLs, repeatable) and the `attach_file` MCP tool. Notes refer to them as `@d1`, `@d2` or by label.
