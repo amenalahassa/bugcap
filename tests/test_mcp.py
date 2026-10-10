@@ -12,7 +12,7 @@ from mcp import ClientSession, StdioServerParameters  # noqa: E402
 from mcp.client.stdio import stdio_client  # noqa: E402
 
 EXPECTED_TOOLS = {
-    "list_reports", "get_report", "request_screenshot", "pull_issues", "attach_image", "update_notes",
+    "list_reports", "get_report", "request_screenshot", "pull_issues", "attach_image", "attach_file", "update_notes",
 }
 
 
