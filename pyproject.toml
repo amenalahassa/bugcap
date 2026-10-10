@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bugcap"
-version = "0.5.1"
+version = "0.6.0"
 description = "Local-first, agent-readable bug capture: annotated screenshots + notes, stored locally, synced to trackers on your own schedule."
 readme = "README.md"
 requires-python = ">=3.10"
