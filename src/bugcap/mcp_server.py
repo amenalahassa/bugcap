@@ -18,10 +18,26 @@ from .store import Store
 
 log = logging.getLogger("bugcap.mcp")
 
-INSTALL_HINT = (
-    "The MCP server needs the 'mcp' extra: pipx install 'bugcap[mcp]' "
-    "(or pipx inject bugcap mcp)."
-)
+def _install_hint() -> str:
+    """Computed per call (not a constant) so it always names the interpreter actually
+    running `bugcap mcp-serve` right now.
+
+    Report #9: a user installed bugcap in dev mode (no extra) first, got this hint, ran
+    the suggested `pipx install 'bugcap[mcp]'` -- and still hit it. pipx had refused to
+    touch the `bugcap` shim because it already pointed elsewhere ("File exists ... Not
+    modifying."), so the dev-mode install kept running. Naming the interpreter here turns
+    that into something diagnosable instead of a silent repeat of the same error."""
+    return (
+        "The MCP server needs the 'mcp' extra: pipx install 'bugcap[mcp]' "
+        "(or pipx inject bugcap mcp).\n"
+        f"Running from: {sys.executable}\n"
+        "If you just installed the extra and still see this, the `bugcap` on PATH may be "
+        "a different install than the one you just updated (a leftover shim from an "
+        "earlier `pip install -e .`, `uv tool install` or `pipx install` can shadow it "
+        "silently -- on Windows, pipx warns \"File exists ... Not modifying.\" instead of "
+        "replacing it). Check with `where bugcap` (or `which bugcap`), then reinstall over "
+        "it with `pipx install 'bugcap[mcp]' --force`."
+    )
 
 
 class MCPUnavailable(RuntimeError):
@@ -125,7 +141,7 @@ def build_server():
     try:
         from mcp.server.fastmcp import FastMCP, Image
     except ImportError as exc:  # pragma: no cover - exercised via subprocess test
-        raise MCPUnavailable(INSTALL_HINT) from exc
+        raise MCPUnavailable(_install_hint()) from exc
 
     server = FastMCP("bugcap")
     _log_client_initialize()

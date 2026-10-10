@@ -228,7 +228,13 @@ def _setup_capture(args: argparse.Namespace) -> int:
     if rc != 0:
         print(f"error: install command failed (exit {rc}).", file=sys.stderr)
         return 1
-    print(f"{rec.name} installed.")
+    if backends.detect() is not None:
+        print(f"{rec.name} installed.")
+        return 0
+    print(
+        f"{rec.name} installed, but this terminal can't see it on PATH yet.\n"
+        f"Close and reopen your terminal (or start a new one), then run `bugcap setup` again."
+    )
     return 0
 
 
@@ -997,7 +1003,27 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _use_utf8_streams() -> None:
+    """Make stdout/stderr tolerant of report text the console's codepage can't show.
+
+    Report titles and notes are free-form user text and may contain characters
+    (accents, emoji, …) outside the active console codepage. On Windows that
+    codepage is often cp1252, so a bare `print()` of such text raises
+    UnicodeEncodeError and crashes the CLI (e.g. `bugcap show`). Reconfiguring
+    to UTF-8 with 'replace' keeps the command running and shows readable output
+    instead of a traceback.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            try:
+                reconfigure(encoding="utf-8", errors="replace")
+            except (ValueError, OSError):
+                pass
+
+
 def main(argv: list[str] | None = None) -> int:
+    _use_utf8_streams()
     parser = build_parser()
     args = parser.parse_args(argv)
     return args.func(args)

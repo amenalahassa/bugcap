@@ -20,6 +20,19 @@ def _clean_loggers():
             handler.close()
 
 
+def test_install_hint_names_the_running_interpreter():
+    """Report #9: a user who'd already installed the mcp extra elsewhere still hit this
+    hint, because a stale `bugcap` shim on PATH kept running a different, extra-less
+    install. Naming the interpreter actually running lets that be diagnosed instead of
+    repeating the same unhelpful "pipx install" suggestion."""
+    from bugcap import mcp_server
+
+    hint = mcp_server._install_hint()
+    assert sys.executable in hint
+    assert "extra" in hint.lower()
+    assert "force" in hint.lower()  # points at the fix for a shadowed shim
+
+
 def test_default_log_location_is_in_the_data_dir(bugcap_home):
     assert logs.default_log_path() == bugcap_home / "data" / "logs" / "mcp-server.log"
 

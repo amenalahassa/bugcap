@@ -95,8 +95,51 @@ def by_name(name: str) -> Backend:
     raise KeyError(name)
 
 
+def _sync_path_from_registry() -> None:
+    """Pick up a freshly-installed Windows tool without a new terminal.
+
+    winget/scoop/choco update the user/machine PATH in the registry, but an
+    already-running process (and any shell that was already open when the
+    install happened) keeps its original PATH until it restarts. That made
+    `bugcap live` report "No capture tool found" right after `bugcap setup`
+    had just installed flameshot in the same session. Re-reading PATH from
+    the registry before every detection closes that gap. Best-effort: any
+    failure here just leaves PATH as-is.
+    """
+    if sys.platform != "win32":
+        return
+    try:
+        import winreg
+    except ImportError:
+        return
+    try:
+        chunks = [os.environ.get("PATH", "")]
+        for hive, subkey in (
+            (winreg.HKEY_CURRENT_USER, r"Environment"),
+            (winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment"),
+        ):
+            try:
+                with winreg.OpenKey(hive, subkey) as key:
+                    value, _ = winreg.QueryValueEx(key, "Path")
+                    chunks.append(value)
+            except OSError:
+                continue
+        seen = set()
+        merged = []
+        for chunk in chunks:
+            for part in chunk.split(os.pathsep):
+                key = part.lower()
+                if part and key not in seen:
+                    seen.add(key)
+                    merged.append(part)
+        os.environ["PATH"] = os.pathsep.join(merged)
+    except OSError:
+        pass
+
+
 def detect() -> Optional[Backend]:
     """First available backend, in preference order."""
+    _sync_path_from_registry()
     return next((b for b in BACKENDS if b.available()), None)
 
 

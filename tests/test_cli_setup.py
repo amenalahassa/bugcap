@@ -81,6 +81,35 @@ def test_no_package_manager_prints_guidance(monkeypatch, record_run, capsys):
     assert record_run == []
 
 
+def test_yes_install_verified_prints_installed(monkeypatch, record_run, tty, capsys):
+    """After a successful install, setup re-checks detection instead of trusting the exit
+    code: found now -> plain "installed" (the install also made it detectable)."""
+    calls = iter([None, backends.by_name("flameshot")])  # not found, then found
+    monkeypatch.setattr(backends, "detect", lambda: next(calls))
+    monkeypatch.setattr(recorder, "detect_recorder", lambda: types.SimpleNamespace(name="ffmpeg", description="stub"))
+    monkeypatch.setattr(backends, "install_command", lambda b: ["winget", "install", "Flameshot.Flameshot"])
+    tty(False)
+    assert cli.main(["setup", "--yes"]) == 0
+    out = capsys.readouterr().out
+    assert "flameshot installed." in out
+    assert "PATH" not in out
+
+
+def test_yes_install_not_yet_on_path_warns(monkeypatch, record_run, tty, capsys):
+    """Windows installers (winget) often don't update an already-running terminal's PATH,
+    so a bare "installed." would be misleading right before `bugcap live` fails to find it.
+    Detection still failing after a successful install should say so instead."""
+    monkeypatch.setattr(backends, "detect", lambda: None)  # still not found, even post-install
+    monkeypatch.setattr(recorder, "detect_recorder", lambda: types.SimpleNamespace(name="ffmpeg", description="stub"))
+    monkeypatch.setattr(backends, "install_command", lambda b: ["winget", "install", "Flameshot.Flameshot"])
+    tty(False)
+    assert cli.main(["setup", "--yes"]) == 0
+    out = capsys.readouterr().out
+    assert "installed" in out
+    assert "PATH" in out
+    assert "reopen your terminal" in out
+
+
 def test_version_flag(capsys):
     from bugcap import __version__
 

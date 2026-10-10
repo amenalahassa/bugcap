@@ -4,6 +4,10 @@ import pytest
 from bugcap import repo, tomlio
 from bugcap.repo import RepoConfigError
 
+# `init_repo`/`write_config` now also record the repo in the global known-repos registry
+# (paths.config_dir()); isolate every test in this module from the real one.
+pytestmark = pytest.mark.usefixtures("bugcap_home")
+
 
 def test_default_tag_is_directory_name(git_repo):
     root = git_repo(name="myrepo")
@@ -71,6 +75,48 @@ def test_sync_table_round_trips(git_repo):
     assert cfg.images_repo == "owner/assets"
     assert cfg.images_path == "shots"
     assert cfg.images_branch == "main"
+
+
+def test_known_repos_lists_every_initialized_repo(git_repo):
+    a = repo.init_repo(git_repo(name="repo-a"), tag="repo-a")
+    b = repo.init_repo(git_repo(name="repo-b"), tag="repo-b")
+    known = repo.known_repos()
+    assert [c.key for c in known] == sorted([a.key, b.key])
+
+
+def test_known_repos_prunes_deleted_configs(git_repo):
+    kept = repo.init_repo(git_repo(name="kept"), tag="kept")
+    gone_root = git_repo(name="gone")
+    repo.init_repo(gone_root, tag="gone")
+    (gone_root / ".bugcap.toml").unlink()
+
+    known = repo.known_repos()
+
+    assert [c.key for c in known] == [kept.key]
+
+
+def test_known_repos_self_heals_from_load(git_repo):
+    root = git_repo(name="legacy")
+    repo.init_repo(root, tag="legacy")
+    # Simulate a repo initialized before the registry existed: drop it from the registry
+    # but keep its .bugcap.toml on disk.
+    registry = repo._registry_path()
+    registry.write_text("[]", encoding="utf-8")
+    assert repo.known_repos() == []
+
+    repo.load_repo_config(root)  # any bugcap command run from inside it, e.g. `bugcap list`
+
+    assert [c.key for c in repo.known_repos()] == ["legacy"]
+
+
+def test_known_repos_reflects_config_updates(git_repo):
+    import dataclasses
+
+    root = git_repo(name="proj")
+    cfg = repo.init_repo(root, tag="old-tag")
+    repo.write_config(dataclasses.replace(cfg, tag="new-tag"))
+    known = repo.known_repos()
+    assert [c.tag for c in known] == ["new-tag"]
 
 
 def test_tomlio_quotes_special_characters(tmp_path):

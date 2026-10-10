@@ -1,15 +1,17 @@
 """Per-repo setup: `bugcap init` writes .bugcap.toml so captures there get a tag + GitHub slug."""
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from . import tomlio
+from . import paths, tomlio
 
 CONFIG_NAME = ".bugcap.toml"
+_REGISTRY_NAME = "known_repos.json"
 
 
 class RepoConfigError(RuntimeError):
@@ -77,7 +79,11 @@ def _config_from_file(path: Path) -> RepoConfig:
 
 def load_repo_config(start: Optional[Path] = None) -> Optional[RepoConfig]:
     path = find_config(start)
-    return _config_from_file(path) if path else None
+    if path is None:
+        return None
+    cfg = _config_from_file(path)
+    _remember(cfg.root)  # self-heals the registry for repos init'd before it existed
+    return cfg
 
 
 def write_config(cfg: RepoConfig) -> None:
@@ -96,6 +102,63 @@ def write_config(cfg: RepoConfig) -> None:
     if sync:
         data["sync"] = sync
     tomlio.save(cfg.root / CONFIG_NAME, data)
+    _remember(cfg.root)
+
+
+# --- known repos ----------------------------------------------------------------
+# A small global registry of every repo `bugcap init` has written a .bugcap.toml for, so
+# `bugcap live` can offer "which repo is this bug for?" without scanning the filesystem.
+
+def _registry_path() -> Path:
+    return paths.config_dir() / _REGISTRY_NAME
+
+
+def _load_registry() -> list[str]:
+    path = _registry_path()
+    if not path.is_file():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    return [entry for entry in data if isinstance(entry, str)]
+
+
+def _save_registry(roots: list[str]) -> None:
+    try:
+        _registry_path().write_text(json.dumps(roots, indent=2), encoding="utf-8")
+    except OSError:
+        pass  # best-effort: the registry is just a convenience index, never the source of truth
+
+
+def _remember(root: Path) -> None:
+    """Record `root` as a repo `init` has configured, for `known_repos()` to list later."""
+    key = str(root.resolve())
+    roots = _load_registry()
+    if key not in roots:
+        roots.append(key)
+        _save_registry(roots)
+
+
+def known_repos() -> list[RepoConfig]:
+    """Every repo with a live .bugcap.toml that `init` has ever written, sorted by key.
+    Entries whose config file is gone (moved or deleted) are dropped and the registry is
+    pruned, so this is always in sync with what's actually on disk."""
+    roots = _load_registry()
+    kept: list[str] = []
+    configs: list[RepoConfig] = []
+    for raw in roots:
+        config_path = Path(raw) / CONFIG_NAME
+        if not config_path.is_file():
+            continue
+        try:
+            configs.append(_config_from_file(config_path))
+        except (OSError, ValueError):
+            continue
+        kept.append(raw)
+    if kept != roots:
+        _save_registry(kept)
+    return sorted(configs, key=lambda c: c.key.lower())
 
 
 def build_config(
