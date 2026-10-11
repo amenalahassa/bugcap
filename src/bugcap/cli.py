@@ -229,6 +229,8 @@ def _setup_capture(args: argparse.Namespace) -> int:
         print(f"error: install command failed (exit {rc}).", file=sys.stderr)
         return 1
     if backends.detect() is not None:
+        for binary in rec.binaries:
+            backends.ensure_on_user_path(binary)
         print(f"{rec.name} installed.")
         return 0
     print(
