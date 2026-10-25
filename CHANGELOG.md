@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.1 - 2026-10-25
+
+### Added
+- bugcap is listed in the official MCP Registry as `io.github.amenalahassa/bugcap` (`server.json` at the repo root, verified through the PyPI README).
+
 ## 0.7.0 - 2026-10-25
 
 ### Added

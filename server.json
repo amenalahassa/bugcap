@@ -1,0 +1,27 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.amenalahassa/bugcap",
+  "title": "bugcap",
+  "description": "Local-first bug reports for coding agents: annotated screenshots and notes, images included.",
+  "repository": {
+    "url": "https://github.com/amenalahassa/bugcap",
+    "source": "github"
+  },
+  "websiteUrl": "https://amenalahassa.github.io/bugcap/",
+  "version": "0.7.1",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "bugcap",
+      "version": "0.7.1",
+      "runtimeHint": "uvx",
+      "runtimeArguments": [
+        { "type": "named", "name": "--from", "value": "bugcap[mcp]" }
+      ],
+      "packageArguments": [
+        { "type": "positional", "value": "mcp-serve" }
+      ],
+      "transport": { "type": "stdio" }
+    }
+  ]
+}

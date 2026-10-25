@@ -1,3 +1,4 @@
+<!-- mcp-name: io.github.amenalahassa/bugcap -->
 <p align="center">
   <img src="https://raw.githubusercontent.com/amenalahassa/bugcap/master/docs/assets/logo.svg" alt="bugcap" width="96">
 </p>
