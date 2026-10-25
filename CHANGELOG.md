@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.2 - 2026-10-25
 
 ### Changed
 - MCP tools: every tool now has a title, behavior annotations (read-only, destructive, idempotent, network) and a description that says when to use it, what it changes and what it returns, and every parameter is described. The server also sends usage instructions on connect. Requires `mcp>=1.10`.
