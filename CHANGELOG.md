@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- MCP tools: every tool now has a title, behavior annotations (read-only, destructive, idempotent, network) and a description that says when to use it, what it changes and what it returns, and every parameter is described. The server also sends usage instructions on connect. Requires `mcp>=1.10`.
+
+### Added
+- `Dockerfile` for the MCP server (the image Glama uses to check it) and `glama.json`. CI builds the image, drives the server inside it, and runs the TDQS lint on the tool definitions; a tag is only published to PyPI when that passes.
+
 ## 0.7.1 - 2026-10-25
 
 ### Added
