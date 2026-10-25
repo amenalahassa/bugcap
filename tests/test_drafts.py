@@ -76,3 +76,69 @@ def test_legacy_png_draft_still_loads(bugcap_home):
     assert d.title == "old" and d.items[0]["kind"] == "image" and d.png_path.name == "old.png"
     drafts.delete_draft("old")
     assert list(directory.iterdir()) == []
+
+
+# --- progress drafts (format v2: media left in place) -----------------------------
+
+def _progress_items(tmp_path):
+    shot = _png(tmp_path, "keep.png")
+    return shot, [{"number": 2, "kind": "image", "path": str(shot), "mime": "image/png", "size_bytes": 9,
+                   "frames": [], "source": "keep.png", "shared": True}]
+
+
+def test_write_progress_leaves_media_in_place_and_round_trips(bugcap_home, tmp_path):
+    shot, items = _progress_items(tmp_path)
+    draft_id = drafts.write_progress(None, "o/r", {"title": "T", "notes": "see @i2", "tags": ["a"]}, items)
+    assert shot.exists()
+    meta = json.loads((drafts.drafts_dir() / f"{draft_id}.json").read_text())
+    assert meta["version"] == 2 and meta["updated_at"] and meta["media"][0]["path"] == str(shot)
+    d = drafts.load_draft(draft_id)
+    assert (d.title, d.notes, d.tags, d.repo) == ("T", "see @i2", ["a"], "o/r")
+    assert d.items[0]["path"] == str(shot) and d.items[0]["number"] == 2
+    assert d.items[0]["source"] == "keep.png" and d.items[0]["shared"] is True
+
+
+def test_write_progress_rewrites_the_same_draft(bugcap_home, tmp_path):
+    shot, items = _progress_items(tmp_path)
+    draft_id = drafts.write_progress(None, "o/r", {"title": "one"}, items)
+    created = drafts.load_draft(draft_id).created_at
+    assert drafts.write_progress(draft_id, "o/r", {"title": "two"}, items) == draft_id
+    assert [d.title for d in drafts.list_drafts("o/r")] == ["two"]
+    assert drafts.load_draft(draft_id).created_at == created
+    assert not list(drafts.drafts_dir().glob("*.tmp"))
+
+
+def test_write_progress_is_atomic(bugcap_home, tmp_path, monkeypatch):
+    shot, items = _progress_items(tmp_path)
+    draft_id = drafts.write_progress(None, "o/r", {"title": "safe"}, items)
+
+    def crash(*a, **k):
+        raise OSError("power cut")
+
+    monkeypatch.setattr(drafts.os, "replace", crash)
+    try:
+        drafts.write_progress(draft_id, "o/r", {"title": "lost"}, items)
+    except OSError:
+        pass
+    assert drafts.load_draft(draft_id).title == "safe"
+
+
+def test_progress_draft_without_media(bugcap_home):
+    draft_id = drafts.write_progress(None, None, {"title": "just a note"}, [])
+    d = drafts.load_draft(draft_id)
+    assert d.title == "just a note" and d.items == []
+
+
+def test_delete_never_removes_media_kept_in_place(bugcap_home, tmp_path):
+    shot, items = _progress_items(tmp_path)
+    draft_id = drafts.write_progress(None, "o/r", {"title": "T"}, items)
+    drafts.delete_draft(draft_id)
+    assert shot.exists() and drafts.load_draft(draft_id) is None
+
+
+def test_progress_draft_is_listed_for_its_launch_repo_too(bugcap_home, tmp_path):
+    shot, items = _progress_items(tmp_path)
+    draft_id = drafts.write_progress(None, "other/repo", {"title": "filed elsewhere"}, items, launch_repo="o/r")
+    assert [d.id for d in drafts.list_drafts("o/r")] == [draft_id]
+    assert [d.id for d in drafts.list_drafts("other/repo")] == [draft_id]
+    assert drafts.list_drafts("x/y") == []

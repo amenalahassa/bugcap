@@ -252,3 +252,16 @@ def test_unwritable_output_folder_fails_before_recording(env, tmp_path):
         assert "not writable" in str(exc.value) and env.argvs == []
     finally:
         locked.chmod(0o700)
+
+
+def test_still_valid_stops_the_recording_and_keeps_the_file(env, tmp_path):
+    answers = iter([None, None, "window closed"])
+    result = run(env, tmp_path, still_valid=lambda: next(answers))
+    assert result.reason == "window closed" and result.path is not None and env.proc.waited
+
+
+def test_target_is_passed_to_the_argv(env, tmp_path):
+    from bugcap.targets import CaptureTarget
+
+    run(env, tmp_path, target=CaptureTarget("region", rect=(0, 0, 320, 240)))
+    assert "-video_size" in env.argvs[0] and "320x240" in env.argvs[0]

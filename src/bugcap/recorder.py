@@ -77,6 +77,27 @@ WAYLAND_HELP = (
 )
 
 
+class TargetUnsupported(ValueError):
+    """This backend cannot capture that kind of target (the live chooser never offers it)."""
+
+
+def _target_parts(target, for_recording: bool = True):
+    """(kind, rect) of a `targets.CaptureTarget` (duck-typed, so this module needs no import):
+    the monitor's, region's or window's rectangle, sizes rounded down to even for encoding."""
+    kind = getattr(target, "kind", "all") if target is not None else "all"
+    rect = None
+    if kind == "monitor" and target.monitor is not None:
+        rect = target.monitor.rect
+    elif kind == "region":
+        rect = target.rect
+    elif kind == "window" and target.window is not None:
+        rect = target.window.rect
+    if rect is not None and for_recording:
+        x, y, w, h = rect
+        rect = (x, y, w - w % 2, h - h % 2)
+    return kind, rect
+
+
 class RecorderError(RuntimeError):
     def __init__(self, message: str, guidance: Optional[str] = None):
         super().__init__(message)
@@ -126,31 +147,68 @@ def build_capture_argv(
     display: Optional[str] = None,
     codec: str = "h264",
     av_index: int = 0,
+    target=None,
 ) -> list[str]:
     """The command that records the screen to `out_path` (always a real video; animated and
-    frames are derived from it afterwards)."""
+    frames are derived from it afterwards). `target` (a `targets.CaptureTarget`) limits it to
+    one monitor, a region or a window; without one (or "all") the command is as it always was."""
     platform = platform_key(platform)
     if fmt not in FORMATS:
         raise ValueError(f"unknown format {fmt!r}")
     vp9 = codec == "vp9" and fmt == "video"
+    kind, rect = _target_parts(target)
     if backend == "wf-recorder":
         argv = ["wf-recorder", "-r", str(fps)]
+        if kind == "monitor":
+            argv += ["-o", target.monitor.id]
+        elif kind == "region":
+            x, y, w, h = rect
+            argv += ["-g", f"{x},{y} {w}x{h}"]
+        elif kind == "window":
+            raise TargetUnsupported("wf-recorder cannot record a single window")
         argv += ["-c", "libvpx-vp9"] if vp9 else ["-c", "libx264", "-x", "yuv420p"]
         return argv + ["-f", out_path]
 
     argv = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "warning"]
+    crop = ""
     if platform == "linux":
-        argv += ["-f", "x11grab", "-framerate", str(fps), "-i", display or ":0.0"]
+        if rect is not None:
+            x, y, w, h = rect
+            argv += ["-f", "x11grab", "-framerate", str(fps), "-video_size", f"{w}x{h}",
+                     "-i", f"{display or ':0.0'}+{x},{y}"]
+        else:
+            argv += ["-f", "x11grab", "-framerate", str(fps), "-i", display or ":0.0"]
     elif platform == "windows":
-        argv += ["-f", "gdigrab", "-framerate", str(fps), "-i", "desktop"]
+        if kind == "window":
+            argv += ["-f", "gdigrab", "-framerate", str(fps), "-i", f"title={target.window.title}"]
+        elif rect is not None:
+            x, y, w, h = rect
+            argv += ["-f", "gdigrab", "-framerate", str(fps), "-offset_x", str(x), "-offset_y", str(y),
+                     "-video_size", f"{w}x{h}", "-i", "desktop"]
+        else:
+            argv += ["-f", "gdigrab", "-framerate", str(fps), "-i", "desktop"]
     else:
+        if kind == "window":
+            raise TargetUnsupported("recording a single window is not supported on macOS")
+        if kind == "monitor":
+            av_index = int(target.monitor.id)
+        elif kind == "region":
+            x, y, w, h = rect
+            space = getattr(target, "space", None)
+            if space:  # drawn in points; the screen records in (maybe 2x) pixels
+                sw, sh = space
+                crop = f"crop=w=iw*{w}/{sw}:h=ih*{h}/{sh}:x=iw*{x}/{sw}:y=ih*{y}/{sh},"
+            else:
+                crop = f"crop={w}:{h}:{x}:{y},"
         argv += ["-f", "avfoundation", "-framerate", str(fps), "-capture_cursor", "1", "-i", f"{av_index}:none"]
     argv += ["-t", str(max_seconds)]
-    argv += ["-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2"]
+    argv += ["-vf", crop + "pad=ceil(iw/2)*2:ceil(ih/2)*2"]
     if vp9:
         argv += ["-c:v", "libvpx-vp9", "-crf", "35", "-b:v", "0"]
     else:
         argv += ["-c:v", "libx264", "-crf", "30", "-pix_fmt", "yuv420p", "-preset", "veryfast"]
+        if kind != "all":  # still playable if a closed window or a crash cuts the recording short
+            argv += ["-movflags", "+frag_keyframe+empty_moov"]
     return argv + [out_path]
 
 
@@ -250,9 +308,14 @@ def run_recording(
     sleep: Callable[[float], None] = time.sleep,
     size_of: Callable[[object], int] = _size,
     poll_interval: float = 0.2,
+    target=None,
+    still_valid: Optional[Callable[[], Optional[str]]] = None,
 ) -> RecordResult:
     """Record until `wait_for_stop()` is true, Ctrl+C, or a cap is hit; always wait for the
-    recorder to exit so the file is complete; then derive animated/frames if requested."""
+    recorder to exit so the file is complete; then derive animated/frames if requested.
+    `target` limits what is recorded (see `build_capture_argv`); `still_valid()` returns None
+    while that target can still be recorded, or a reason ("window closed") to stop and keep
+    what was recorded."""
     platform = platform_key(platform)
     env = os.environ if env is None else env
     try:
@@ -267,13 +330,13 @@ def run_recording(
     raw = out_dir / f"{stem}{ext}"
 
     av_index = 0
-    if backend == "ffmpeg" and platform == "macos":
+    if backend == "ffmpeg" and platform == "macos" and getattr(target, "kind", "all") != "monitor":
         probe = runner(["ffmpeg", "-f", "avfoundation", "-list_devices", "true", "-i", ""],
                        capture_output=True, text=True)
         av_index = parse_avfoundation_screen_index((probe.stderr or "") + (probe.stdout or ""))
 
     argv = build_capture_argv(backend, platform, fmt, fps, max_seconds, str(raw),
-                              display=env.get("DISPLAY"), codec=codec, av_index=av_index)
+                              display=env.get("DISPLAY"), codec=codec, av_index=av_index, target=target)
     log = tempfile.TemporaryFile()
     try:
         proc = popen(argv, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=log)
@@ -291,6 +354,10 @@ def run_recording(
                 break
             if wait_for_stop():
                 reason = "stopped by user"
+                break
+            why = still_valid() if still_valid is not None else None
+            if why:
+                reason = why
                 break
             if clock() - started >= max_seconds:
                 reason = "duration cap"

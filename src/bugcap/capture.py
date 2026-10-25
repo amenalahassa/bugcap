@@ -7,6 +7,10 @@ from pathlib import Path
 
 from . import backends
 from .paths import images_dir
+from .recorder import TargetUnsupported, _target_parts, platform_key
+
+__all__ = ["CaptureError", "TargetUnsupported", "build_screenshot_argv", "capture_screenshot", "has_display",
+           "import_image"]
 
 
 class CaptureError(RuntimeError):
@@ -42,47 +46,73 @@ def import_image(source: Path) -> Path:
     return dest
 
 
-def capture_screenshot() -> Path:
-    """Launch the detected backend's interactive capture UI and return the saved PNG path.
-    Blocks until the user finishes (saves or cancels).
+def _geometry(rect) -> str:
+    x, y, w, h = rect
+    return f"{w}x{h}+{x}+{y}"
+
+
+def build_screenshot_argv(backend: str, target, dest, platform=None, raw=None,
+                          resolve=lambda name: name) -> list[list[str]]:
+    """The command(s) that capture `target` (a `targets.CaptureTarget`, or None for the
+    backend's usual interactive capture) into `dest`, run in order. satty needs a grim grab
+    into `raw` first. Raises TargetUnsupported for a combination the backend cannot do."""
+    kind, rect = _target_parts(target, for_recording=False)
+    dest = str(dest)
+    if backend == "flameshot":
+        exe = resolve("flameshot")
+        if kind == "monitor":  # annotate on that screen only (bugcap report: multi-monitor Windows)
+            return [[exe, "screen", "-n", str(target.monitor.number), "-e", "--path", dest]]
+        if kind in ("region", "window"):
+            return [[exe, "gui", "--region", _geometry(rect), "--path", dest]]
+        return [[exe, "gui", "--path", dest]]
+    if backend == "satty":
+        grim = [resolve("grim")]
+        if kind == "monitor":
+            grim += ["-o", target.monitor.id]
+        elif kind == "region":
+            x, y, w, h = rect
+            grim += ["-g", f"{x},{y} {w}x{h}"]
+        elif kind == "window":
+            raise TargetUnsupported("grim cannot capture a single window")
+        return [grim + [str(raw)], [resolve("satty"), "--filename", str(raw), "--output-filename", dest]]
+    if backend == "screencapture":
+        exe = resolve("screencapture")
+        if kind == "monitor":
+            return [[exe, "-D", str(target.monitor.number + 1), dest]]
+        if kind == "region":
+            return [[exe, "-R", ",".join(str(v) for v in rect), dest]]
+        if kind == "window":
+            return [[exe, "-i", "-w", dest]]
+        # -i interactive region/window selection (space toggles window mode)
+        return [[exe, "-i", dest]]
+    raise CaptureError(f"Unknown backend: {backend}")
+
+
+def capture_screenshot(target=None) -> Path:
+    """Launch the detected backend's capture and return the saved PNG path. Without a
+    `target` it is the backend's interactive capture UI; with one (live mode) it covers just
+    that monitor, region or window. Blocks until the user finishes (saves or cancels).
     """
     backend = backends.detect()
     if backend is None:
         raise _no_backend_error()
     dest = images_dir() / f"{uuid.uuid4()}.png"
-
-    if backend.name == "flameshot":
-        exe = backends.resolve("flameshot") or "flameshot"
-        result = subprocess.run(
-            [exe, "gui", "--path", str(dest)], capture_output=True, text=True
-        )
-        if result.returncode != 0:
-            raise CaptureError(f"flameshot exited with {result.returncode}: {result.stderr}")
-    elif backend.name == "satty":
-        raw = images_dir() / f"{uuid.uuid4()}-raw.png"
-        subprocess.run([backends.resolve("grim") or "grim", str(raw)], check=True)
-        result = subprocess.run(
-            [
-                backends.resolve("satty") or "satty",
-                "--filename",
-                str(raw),
-                "--output-filename",
-                str(dest),
-            ],
-            capture_output=True,
-            text=True,
-        )
-        raw.unlink(missing_ok=True)
-        if result.returncode != 0:
-            raise CaptureError(f"satty exited with {result.returncode}: {result.stderr}")
-    elif backend.name == "screencapture":
-        # -i interactive region/window selection (space toggles window mode)
-        exe = backends.resolve("screencapture") or "screencapture"
-        result = subprocess.run([exe, "-i", str(dest)], capture_output=True, text=True)
-        if result.returncode != 0:
-            raise CaptureError(f"screencapture exited with {result.returncode}: {result.stderr}")
-    else:  # pragma: no cover
-        raise CaptureError(f"Unknown backend: {backend.name}")
+    raw = images_dir() / f"{uuid.uuid4()}-raw.png" if backend.name == "satty" else None
+    commands = build_screenshot_argv(backend.name, target, dest, platform_key(), raw,
+                                     resolve=lambda name: backends.resolve(name) or name)
+    try:
+        for argv in commands:
+            result = subprocess.run(argv, capture_output=True, text=True)
+            if result.returncode != 0 and backend.name == "flameshot" and argv[1] == "screen":
+                # flameshot numbers screens its own way; the monitor's rectangle always works
+                fallback = [argv[0], "gui", "--region", _geometry(target.monitor.rect), "--path", str(dest)]
+                result = subprocess.run(fallback, capture_output=True, text=True)
+            if result.returncode != 0:
+                name = Path(argv[0]).stem
+                raise CaptureError(f"{name} exited with {result.returncode}: {result.stderr}")
+    finally:
+        if raw is not None:
+            raw.unlink(missing_ok=True)
 
     if not dest.exists():
         raise CaptureError(

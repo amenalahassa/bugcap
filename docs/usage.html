@@ -101,12 +101,30 @@ bugcap images &lt;id&gt; remove 2 --force             # rewrites @ references in
     <p>A small always-on-top window sits in the top-right corner while you test. Needs tkinter and a desktop session.</p>
     <ul>
       <li><strong>Screenshot</strong> and <strong>Record</strong> (then <strong>Stop</strong>) each add a capture to a staged set. Stage as many images and videos as you like, in any mix.</li>
+      <li>Each Screenshot or Record first asks <strong>what</strong> to capture: all screens, one monitor, a region you drag on the screen, or one window. Your last choice is preselected; Enter confirms, Esc cancels. Options your system can't do are greyed out with the reason:
+        <ul>
+          <li>Windows: everything (Flameshot opens on the monitor you picked; a window recording follows that window).</li>
+          <li>Linux X11: everything; picking a window needs <code>wmctrl</code> or <code>xwininfo</code>.</li>
+          <li>Linux Wayland: all screens, a monitor, and a region (needs <code>slurp</code>); no single window.</li>
+          <li>macOS: screenshots of anything; recordings of a screen or a region, not a single window.</li>
+        </ul>
+        A window recording stops by itself, keeping what it has, when the window is closed, minimised or (X11) moved.</li>
       <li><strong>Upload image...</strong> and <strong>Attach file...</strong> open a file picker (several files at once) and stage what you pick, exactly like <code>attach --image</code> and <code>attach --file</code>. Images are checked; files can be of any type and are referred to as <code>@d1</code>, <code>@d2</code>, and so on.</li>
+      <li>Every staged item is listed in the window and in the bug form. Click one to open it in your usual app (videos too); <strong>✕</strong> removes it after a confirmation. Tags don't shift when an item is removed: after removing <code>@i2</code> the others stay <code>@i1</code> and <code>@v3</code>, and they are renumbered in the saved report.</li>
       <li><strong>New bug from N items</strong> turns the staged set into one report; refer to the items in the notes with <code>@i1</code>, <code>@v2</code>, and so on. The form's <strong>Repo</strong> field defaults to the launch repo but can be switched to any repo you've already run <code>bugcap init</code> in.</li>
       <li><strong>Add to existing bug</strong> attaches the staged set, plus an optional note, to a bug you already filed.</li>
       <li><strong>New bug (note only)</strong> files a bug with no media: a title, a note and optional tags.</li>
-      <li>Closing with staged captures or typed text offers to keep them as a draft, restored the next time you start live mode.</li>
+      <li>The bug form remembers what you typed until you <strong>Save</strong> or <strong>Discard</strong>: <strong>Back</strong> (or closing the form) keeps the title, notes, tags, status and repo for the next time you open it. <strong>Add to existing bug</strong> also remembers the chosen bug and note after <strong>Cancel</strong>, while live mode runs.</li>
+      <li>The bug in progress (fields and staged items) is autosaved every few seconds. After a crash, or after quitting, the next <code>bugcap live</code> offers to restore it.</li>
     </ul>
+    <p>Keyboard shortcuts work while a bugcap window has focus (never system-wide); every button shows its key, and <strong>F1</strong> lists them all. On macOS, Ctrl is ⌘ and Alt is Option.</p>
+    <table>
+      <tr><th>Window</th><th>Keys</th></tr>
+      <tr><td>Control window</td><td><code>S</code> Screenshot · <code>R</code> Record/Stop · <code>I</code> Upload image · <code>F</code> Attach file · <code>N</code> New bug · <code>E</code> Add to existing · <code>Del</code> Clear</td></tr>
+      <tr><td>New bug form</td><td><code>Ctrl+Enter</code> Save · <code>Esc</code> Back · <code>Alt+D</code> Discard · <code>Alt+X</code> remove the selected item · <code>Alt+O</code> open it · <code>←</code>/<code>→</code> select an item (Tab to the item strip first)</td></tr>
+      <tr><td>Add to existing bug</td><td><code>Ctrl+Enter</code> Add · <code>Esc</code> Cancel · <code>Alt+B</code> choose the bug</td></tr>
+      <tr><td>Capture what?</td><td><code>Enter</code> capture · <code>Esc</code> cancel</td></tr>
+    </table>
 <pre><code>bugcap live
 bugcap live --repo-dir ~/code/myproj        # scope reports to that repo's .bugcap.toml</code></pre>
 
