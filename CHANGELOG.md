@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.0 - 2026-10-25
 
 ### Added
 - Live mode, attachments: remove a staged item (after a confirmation) from the control window or the bug form, and click any item, videos included, to open it in the OS default app. Staged items keep their `@` tag when another one is removed; the saved report renumbers them and rewrites the notes to match.
@@ -10,6 +10,7 @@
 - Live mode, shortcuts: every action has a key while a bugcap window has focus. In the control window: `S` Screenshot, `R` Record/Stop, `I` Upload image, `F` Attach file, `N` New bug, `E` Add to existing, `Del` Clear. In the forms: `Ctrl/⌘+Enter` Save/Add, `Esc` Back/Cancel, `Alt+D` Discard, `Alt+X`/`Alt+O` remove/open the selected item. Buttons show their key, and `F1` lists them all.
 
 ### Fixed
+- Windows: when Flameshot (or another capture tool) is installed but not on `PATH`, bugcap now finds it in its usual install folder (e.g. `Program Files\Flameshot\bin`), and `bugcap setup` adds that folder to the user `PATH`.
 - Live mode: keeping staged captures as a draft no longer moves an uploaded file that is stored once and may belong to other reports; the draft gets its own copy.
 
 ## 0.6.0 - 2026-10-10
