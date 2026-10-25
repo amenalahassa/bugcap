@@ -30,9 +30,25 @@ jobs:
       - run: uv run --python ${{ matrix.python-version }} --extra dev ruff check src tests
       - run: uv run --python ${{ matrix.python-version }} --extra dev --extra mcp pytest -v -o faulthandler_timeout=120
 
+  # The image Glama builds to check the MCP server (see Dockerfile); a release that would not
+  # start there, or whose tool definitions regress, fails here before reaching PyPI.
+  mcp-image:
+    name: MCP server image (Docker + TDQS lint)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - run: docker build -t bugcap-mcp .
+      - run: uv run --extra mcp python scripts/docker_smoke.py bugcap-mcp
+      - run: npx -y mcp-tdqs lint --command "uv run --extra mcp bugcap mcp-serve" --fail-on warning
+
   publish:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: test
+    needs: [test, mcp-image]
     runs-on: ubuntu-latest
     environment: pypi
     permissions:

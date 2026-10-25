@@ -113,3 +113,17 @@ def test_mcp_attach_image_and_update_notes(bugcap_home, sample_images):
     assert json.loads(good.content[0].text)["references"][0]["token"] == "@shot"
     err = json.loads(bad.content[0].text)
     assert err["code"] == "invalid_reference" and err["token"] == "@7"
+
+
+def test_mcp_tool_definitions_are_documented():
+    """Agents only see the definitions; keep every tool titled, annotated and every parameter described
+    (graded by TDQS on Glama, linted in CI)."""
+    from bugcap.mcp_server import build_server
+
+    tools = asyncio.run(build_server().list_tools())
+    assert {t.name for t in tools} == EXPECTED_TOOLS
+    for t in tools:
+        assert t.title and t.annotations is not None and t.annotations.readOnlyHint is not None, t.name
+        assert len(t.description) >= 200, t.name
+        for name, schema in t.inputSchema["properties"].items():
+            assert schema.get("description"), f"{t.name}.{name}"

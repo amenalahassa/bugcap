@@ -2,7 +2,6 @@
 
 The SDK is imported lazily so the core CLI works without it; `bugcap mcp-serve`
 without the extra fails with a clear install hint. Tool logic lives in `agent_api`."""
-from __future__ import annotations
 
 import functools
 import json
@@ -10,7 +9,7 @@ import logging
 import os
 import sys
 import time
-from typing import Optional
+from typing import Annotated, Literal, Optional
 
 from . import agent_api, logs
 from .paths import db_path
@@ -140,26 +139,61 @@ def build_server():
     """Construct the FastMCP server with the tools registered."""
     try:
         from mcp.server.fastmcp import FastMCP, Image
+        from mcp.types import ToolAnnotations
+        from pydantic import Field
     except ImportError as exc:  # pragma: no cover - exercised via subprocess test
         raise MCPUnavailable(_install_hint()) from exc
 
-    server = FastMCP("bugcap")
+    server = FastMCP(
+        "bugcap",
+        instructions=(
+            "bugcap stores bug reports locally: a title, notes, annotated screenshots and attached "
+            "files, optionally linked to a GitHub issue. Start with list_reports, read one with "
+            "get_report (it returns the screenshots as images), then add evidence with attach_image, "
+            "attach_file or request_screenshot and record findings with update_notes."
+        ),
+    )
     _log_client_initialize()
 
-    def tool():
+    def tool(title: str, **hints):
         def register(fn):
-            return server.tool()(_logged(fn))
+            return server.tool(title=title, annotations=ToolAnnotations(title=title, **hints))(_logged(fn))
         return register
 
-    @tool()
-    def list_reports(all: bool = False, status: Optional[str] = None, limit: Optional[int] = None) -> str:
-        """List bug reports (current repo by default; `all` for every repo)."""
+    ReportId = Annotated[int, Field(description="Numeric report id, as returned by list_reports (e.g. 12).")]
+    Labels = Annotated[
+        Optional[list[Optional[str]]],
+        Field(description=(
+            "Optional short names, one per entry in `sources` and in the same order; use null to leave "
+            "one unlabeled. A label lets notes refer to the item as @label."
+        )),
+    ]
+
+    @tool("List bug reports", readOnlyHint=True, openWorldHint=False)
+    def list_reports(
+        all: Annotated[bool, Field(
+            description="false (default): only reports filed for the repo the server runs in. true: every repo."
+        )] = False,
+        status: Annotated[
+            Optional[Literal["open", "in-progress", "resolved", "closed", "wontfix"]],
+            Field(description="Keep only reports with this status. Default: every status."),
+        ] = None,
+        limit: Annotated[Optional[int], Field(description="Return at most this many reports, newest first.")] = None,
+    ) -> str:
+        """List bug reports stored by bugcap, newest first. Use this to find a report id; it returns
+        only summaries (id, title, status, tags, repo, created_at, linked GitHub issue) and no notes
+        or images, so call get_report for the full report. Read-only and local: no network access.
+        Returns a JSON array, empty when nothing matches."""
         with Store() as store:
             return json.dumps(agent_api.list_reports(store, all=all, status=status, limit=limit))
 
-    @tool()
-    def get_report(id: int):
-        """Fetch a report's metadata plus each attached image as image content."""
+    @tool("Get a bug report", readOnlyHint=True, openWorldHint=False)
+    def get_report(id: ReportId):
+        """Read one bug report in full: title, body, notes, status, tags, linked GitHub issue and the
+        list of attached media, followed by every screenshot as image content so you can see it.
+        Use this after list_reports to understand a bug before fixing it. Notes refer to media as
+        @i1, @d1 or @label; `resolved_references` maps each of those tokens to its media index.
+        Read-only and local. Returns {"error": ...} when no report has this id."""
         with Store() as store:
             out = agent_api.get_report(store, id)
         if "error" in out:
@@ -169,16 +203,32 @@ def build_server():
             content.append(Image(data=img["bytes"], format=_image_format(img["mime"])))
         return content
 
-    @tool()
+    @tool("Ask the user for a screenshot", readOnlyHint=False, destructiveHint=False, openWorldHint=False)
     def request_screenshot(
-        report_id: Optional[int] = None,
-        issue: Optional[str] = None,
-        message: Optional[str] = None,
-        timeout_seconds: int = 300,
-        note: Optional[str] = None,
+        report_id: Annotated[Optional[int], Field(
+            description="Report to attach the screenshot to. Give this or `issue`; this wins if both are set."
+        )] = None,
+        issue: Annotated[Optional[str], Field(description=(
+            "GitHub issue to attach it to instead, as 'owner/repo#123' or '123' for the repo configured "
+            "in .bugcap.toml. A report is created for the issue if none exists yet."
+        ))] = None,
+        message: Annotated[Optional[str], Field(
+            description="What you want the user to capture, shown to them before the capture tool opens."
+        )] = None,
+        timeout_seconds: Annotated[int, Field(
+            description="How long to wait for the user before giving up, in seconds (default 300)."
+        )] = 300,
+        note: Annotated[Optional[str], Field(
+            description="Text appended to the report's notes and tied to the new screenshot, e.g. 'after the fix'."
+        )] = None,
     ):
-        """Ask the user to capture a screenshot for a report or issue (blocks when a UI exists).
-        `note` is appended to the report's notes, tied to the new image."""
+        """Ask the human at the machine to take a screenshot (for example to show a bug, or to check a
+        fix) and attach it to a report. Use this when you need visual evidence you cannot produce
+        yourself; to attach an image file that already exists, use attach_image. Opens the user's
+        capture tool and blocks until they finish, cancel or `timeout_seconds` passes. Adds the image
+        to the report (and creates a report for `issue` if needed). Returns {"status": "captured",
+        "report_id"} plus the screenshot as image content, or a status of "cancelled", "error" or
+        "non_interactive" (no desktop available, e.g. over SSH or in a container) with a message."""
         with Store() as store:
             out = agent_api.request_screenshot(
                 store, report_id=report_id, issue=issue, message=message, timeout_seconds=timeout_seconds, note=note
@@ -189,29 +239,75 @@ def build_server():
             content.append(Image(data=image["bytes"], format=_image_format(image["mime"])))
         return content
 
-    @tool()
-    def pull_issues(repo: Optional[str] = None, labels: Optional[list[str]] = None, limit: int = 30) -> str:
-        """Import GitHub issues as reports (same as `bugcap github pull`)."""
+    @tool("Import GitHub issues", readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=True)
+    def pull_issues(
+        repo: Annotated[Optional[str], Field(
+            description="GitHub repo as 'owner/name'. Defaults to the repo configured in .bugcap.toml."
+        )] = None,
+        labels: Annotated[Optional[list[str]], Field(
+            description="Only import issues carrying all of these labels, e.g. ['bug']."
+        )] = None,
+        limit: Annotated[int, Field(description="Maximum number of issues to fetch (default 30).")] = 30,
+    ) -> str:
+        """Import open GitHub issues into bugcap as reports, so you can read them with get_report and
+        attach screenshots to them. Use this when the bug you need lives in GitHub rather than in
+        bugcap yet. Calls the GitHub API through the user's `gh` login. Safe to repeat: an issue
+        that is already imported only has its title and body refreshed, never its notes, tags or
+        status. Returns {"created", "updated", "unchanged"} counts, or {"error": ...} when no repo
+        is given or configured, or `gh` is not signed in."""
         with Store() as store:
             return json.dumps(agent_api.pull_issues(store, repo=repo, labels=labels, limit=limit))
 
-    @tool()
-    def attach_image(id: int, sources: list[str], labels: Optional[list[Optional[str]]] = None) -> str:
-        """Attach images (file paths, globs or http(s) URLs) to a report, with optional labels
-        (one per source, null for none). Notes can then refer to them as @i1 or @label."""
+    @tool("Attach images to a report", readOnlyHint=False, destructiveHint=False, openWorldHint=True)
+    def attach_image(
+        id: ReportId,
+        sources: Annotated[list[str], Field(description=(
+            "1 to 20 images to add: local file paths, glob patterns (e.g. 'shots/*.png') or "
+            "http(s) URLs to download."
+        ))],
+        labels: Labels = None,
+    ) -> str:
+        """Add existing images (PNG, JPEG, GIF or WebP) to a bug report, for example a screenshot
+        you saved or a diagram from a URL. Use attach_file instead for logs, videos or other
+        non-image files, and request_screenshot when the user has to take the picture. Copies each
+        image into bugcap's local store (URLs are downloaded) and appends it to the report; existing
+        media is kept. Notes can then refer to it as @i<n> or @label. Returns {"added": [{index,
+        label, kind, size_bytes, source}], "rejected": [{source, reason}]}: one bad source does not
+        stop the others."""
         with Store() as store:
             return json.dumps(agent_api.attach_image(store, id, sources, labels))
 
-    @tool()
-    def attach_file(id: int, sources: list[str], labels: Optional[list[Optional[str]]] = None) -> str:
-        """Attach files of any type (file paths, globs or http(s) URLs) to a report, with optional
-        labels (one per source, null for none). Notes can then refer to them as @d1 or @label."""
+    @tool("Attach files to a report", readOnlyHint=False, destructiveHint=False, openWorldHint=True)
+    def attach_file(
+        id: ReportId,
+        sources: Annotated[list[str], Field(description=(
+            "1 to 20 files to add: local file paths, glob patterns (e.g. 'logs/*.txt') or "
+            "http(s) URLs to download."
+        ))],
+        labels: Labels = None,
+    ) -> str:
+        """Add files of any type (logs, stack traces, HAR captures, videos, configs) to a bug report as
+        supporting evidence. Use attach_image for pictures so they are returned as images by
+        get_report. Copies each file into bugcap's local store (URLs are downloaded) and appends it
+        to the report; existing media is kept. Attached files are never uploaded to GitHub. Notes
+        can then refer to a file as @d<n> or @label. Returns {"added": [...], "rejected": [{source,
+        reason}]}: one bad source does not stop the others."""
         with Store() as store:
             return json.dumps(agent_api.attach_file(store, id, sources, labels))
 
-    @tool()
-    def update_notes(id: int, notes: str) -> str:
-        """Replace a report's notes. @i1 / @label references must point at the report's images."""
+    @tool("Replace a report's notes", readOnlyHint=False, destructiveHint=True, idempotentHint=True, openWorldHint=False)
+    def update_notes(
+        id: ReportId,
+        notes: Annotated[str, Field(description=(
+            "The complete new notes, in Markdown. Refer to attachments as @i1, @d1 or @label."
+        ))],
+    ) -> str:
+        """Overwrite a bug report's notes with new text, for example to record a diagnosis, steps to
+        reproduce or what a fix changed. The previous notes are replaced, not appended to: read
+        them with get_report first and include whatever should be kept. Every @ reference must
+        match media attached to the report; an unknown one is rejected with an error and nothing
+        is saved. `#12` links another report; one that does not exist is kept and listed in
+        `warnings`. Local only. Returns {"report_id", "notes", "references", "warnings"}."""
         with Store() as store:
             return json.dumps(agent_api.update_notes(store, id, notes))
 
