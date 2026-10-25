@@ -47,7 +47,7 @@ bugcap keeps the whole loop in one place:
 | 🔁 **Sync when ready** | Push to a GitHub issue with the usual inline image, plus a plain copy agents can read. |
 | 🎞️ **Record what happens** | Short screen recordings as animated GIF, video or keyframes, with size caps. |
 | 🖥️ **Triage in a browser** | A local dashboard on `127.0.0.1` to browse, filter and set statuses. |
-| 🪟 **Live mode** | An always-on-top window (top-right) to capture or record, stage several items, then file a new bug, add to an existing one, or log a note-only bug. |
+| 🪟 **Live mode** | An always-on-top window (top-right) to capture or record, stage several items (open or remove any of them), then file a new bug, add to an existing one, or log a note-only bug. |
 
 ## Quick start
 
@@ -162,7 +162,9 @@ Module map (`src/bugcap/`):
 | `ingest.py` | Path/glob/URL inputs: magic-byte validation, size/timeout/redirect limits, atomic copy into `images/`. |
 | `refs.py` | `@` reference parsing (code/email aware), validation, rewrite, display. |
 | `recorder.py` | `ffmpeg`/`wf-recorder` argv per OS, stop/caps watchdogs, animated/frames post-processing. |
-| `live.py` + `live_session.py` + `drafts.py` | Tk control window (thin) over a pure state machine; drafts on disk. |
+| `live.py` + `live_session.py` + `drafts.py` | Tk control window (thin) over a pure state machine; drafts (and the autosaved bug in progress) on disk. |
+| `screens.py` + `targets.py` | Monitors and windows per OS (Win32 via `ctypes`, `xrandr`/`wmctrl`, `wlr-randr`/`swaymsg`), what each platform can capture, and the remembered capture target. |
+| `shortcuts.py` + `opener.py` | Live mode's shortcut table (bindings, button hints, F1 help); opening a staged item in the OS default app. |
 | `dashboard/` | `http.server` UI + JSON API (loopback, Host/Origin checks, write token, Range media, static allowlist). |
 | `repo.py` + `tomlio.py` | `.bugcap.toml` discovery/read/write (tag, github slug, `[sync]`). |
 | `config.py` | Global `config.toml`: `[sync]` defaults, `[consent]` for image commits, `[log]`. |

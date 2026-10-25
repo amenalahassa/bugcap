@@ -3,7 +3,11 @@
 
 The user *stages* media (screenshots and screen recordings, any number, any mix) and then
 either makes a new report from them, adds them to an existing report, or skips media
-altogether and files a note-only bug."""
+altogether and files a note-only bug.
+
+What the user types in the new-bug form is kept here (`form`) until Save or Discard, and is
+autosaved with the staged media as a progress draft, so Back, a quit or a crash loses nothing.
+The "Add to existing" dialog's choice and note (`addition`) are kept in memory only."""
 from __future__ import annotations
 
 import os
@@ -37,6 +41,7 @@ class Staged:
     frames: list = field(default_factory=list)  # [(path, size)] for kind "frames"
     source: Optional[str] = None  # original file name of an upload
     shared: bool = False  # content-addressed upload: the stored file may belong to other reports
+    number: int = 0  # stable staging number shown as `@<letter><number>`; never reused while staged
 
     def files(self) -> list[Path]:
         return ([self.path] if self.path else []) + [Path(p) for p, _ in self.frames]
@@ -44,13 +49,14 @@ class Staged:
     def to_item(self) -> dict:
         return {"kind": self.kind, "path": str(self.path) if self.path else None, "mime": self.mime,
                 "size_bytes": self.size_bytes, "frames": [(str(p), s) for p, s in self.frames],
-                "source": self.source, "shared": self.shared}
+                "source": self.source, "shared": self.shared, "number": self.number}
 
     @classmethod
-    def from_item(cls, item: dict) -> "Staged":
+    def from_item(cls, item: dict, position: int = 1) -> "Staged":
+        """`position` (1-based) numbers items saved before staging numbers existed."""
         return cls(item["kind"], Path(item["path"]) if item["path"] else None, item.get("mime", "image/png"),
                    item.get("size_bytes", 0), [(Path(p), s) for p, s in item.get("frames", [])],
-                   item.get("source"), item.get("shared", False))
+                   item.get("source"), item.get("shared", False), int(item.get("number") or position))
 
     def delete(self) -> None:
         if self.shared:
@@ -87,10 +93,15 @@ def describe(staged: list) -> str:
 class LiveSession:
     def __init__(self, repo_cfg=None, store_factory: Callable[[], Store] = Store):
         self.repo_cfg = repo_cfg
+        self.launch_key = repo_cfg.key if repo_cfg is not None else None  # repo_cfg follows the form's picker
         self.store_factory = store_factory
         self.state = LiveState.READY
         self.saved_count = 0
         self.staged: list[Staged] = []
+        self._last_number = 0  # so a removed last item's number is not handed out again
+        self.form: dict = {}  # the new-bug fields typed so far (title, notes, tags, status, repo)
+        self.addition: dict = {}  # "Add to existing": {"report_id", "note"}; never written to disk
+        self._last_written = None  # what the progress draft holds, to skip identical writes
         self.draft_id: Optional[str] = None
         self.message = ""
 
@@ -113,7 +124,7 @@ class LiveSession:
         if path is None or not Path(path).is_file():
             self.message = message or "Nothing was captured."
             return
-        self.staged.append(Staged("image", Path(path), "image/png", Path(path).stat().st_size))
+        self._stage(Staged("image", Path(path), "image/png", Path(path).stat().st_size))
         self.message = ""
 
     def recording_done(self, result, message: Optional[str] = None) -> None:
@@ -124,8 +135,8 @@ class LiveSession:
         if result is None:
             self.message = message or "Nothing was recorded."
             return
-        self.staged.append(Staged(result.kind, Path(result.path) if result.path else None, result.mime,
-                                  result.size_bytes, [(Path(p), s) for p, s in result.frames]))
+        self._stage(Staged(result.kind, Path(result.path) if result.path else None, result.mime,
+                           result.size_bytes, [(Path(p), s) for p, s in result.frames]))
         self.message = ""
 
     def upload_images(self, paths) -> list[str]:
@@ -148,43 +159,118 @@ class LiveSession:
             except ServiceError as exc:
                 errors.append(f"{Path(raw).name}: {exc.message}")
                 continue
-            self.staged.append(Staged(kind, stored.abs_path, stored.mime, stored.size_bytes,
-                                      source=Path(raw).name, shared=True))
+            self._stage(Staged(kind, stored.abs_path, stored.mime, stored.size_bytes,
+                               source=Path(raw).name, shared=True))
         self.message = ""
         return errors
 
-    def remove_staged(self, index: int) -> None:
-        if self.state is LiveState.READY and 0 <= index < len(self.staged):
-            self.staged.pop(index).delete()
+    def _stage(self, item: Staged) -> None:
+        item.number = max((s.number for s in self.staged), default=self._last_number) + 1
+        self._last_number = item.number
+        self.staged.append(item)
+        self.autosave()
+
+    def find_staged(self, number: int) -> Optional[Staged]:
+        return next((s for s in self.staged if s.number == number), None)
+
+    def item_path(self, number: int) -> Optional[Path]:
+        """What to open for a staged item: its file, or the folder holding a frame set."""
+        item = self.find_staged(number)
+        if item is None:
+            return None
+        if item.path:
+            return Path(item.path)
+        return Path(item.frames[0][0]).parent if item.frames else None
+
+    def remove_staged(self, number: int) -> bool:
+        """Remove the item with this staging number (READY or DETAILS only; never while a
+        capture is running). Its files go too, except a shared upload's."""
+        item = self.find_staged(number)
+        if item is None or self.state not in (LiveState.READY, LiveState.DETAILS):
+            return False
+        self.staged.remove(item)
+        item.delete()
+        self.autosave()
+        return True
 
     def clear_staged(self) -> None:
         for s in self.staged:
             s.delete()
-        self.staged = []
+        self.staged, self._last_number = [], 0
+        self.autosave()
+
+    def abandon(self) -> None:
+        """Throw away everything in progress (staged media, typed fields, its draft)."""
+        self.clear_staged()
+        self._drop_progress()
+        self.form, self.addition = {}, {}
 
     # --- drafts ----------------------------------------------------------------
 
     def restore(self, draft: "drafts.Draft") -> None:
         """Open the details step for a recovered draft (its media become the staged set)."""
         if self.state is LiveState.READY and not self.staged:
-            self.staged = [Staged.from_item(i) for i in draft.items]
+            self.staged = [Staged.from_item(i, n) for n, i in enumerate(draft.items, start=1)]
+            self._last_number = max((s.number for s in self.staged), default=0)
             self.draft_id = draft.id
+            self.form = {**draft.fields(), "repo": draft.repo}
+            self._last_written = None
             self.state = LiveState.DETAILS
 
     def keep_as_draft(self, fields: Optional[dict] = None) -> bool:
-        """Save the staged media and typed fields as a draft and reset. False if empty."""
-        fields = fields or {}
+        """Save the staged media and typed fields as a draft (media moved into drafts/) and
+        reset; it replaces the progress draft, so one draft remains. False if empty."""
+        fields = fields if fields is not None else self.form
         typed = any(fields.get(k) for k in ("title", "notes"))
         if not self.staged and not typed:
+            self._drop_progress()
             self._reset()
             return False
-        if self.draft_id:
-            drafts.delete_draft(self.draft_id)
-        key = self.repo_cfg.key if self.repo_cfg else None
+        key = fields.get("repo") or (self.repo_cfg.key if self.repo_cfg else None)
+        # move the media first: a restored draft's files are named after its id, and
+        # deleting that draft afterwards must not take them along
         drafts.save_draft(key, None, fields, items=[s.to_item() for s in self.staged])
-        self.staged, self.draft_id = [], None
+        self._drop_progress()
+        self.staged, self.form, self._last_number = [], {}, 0
         self._reset()
         return True
+
+    def remember_form(self, fields: dict) -> None:
+        """Keep what is typed in the new-bug form (Back, reopen and autosave use it)."""
+        self.form = dict(fields)
+
+    def autosave(self, fields: Optional[dict] = None) -> bool:
+        """Write the in-progress bug (form + staged media) to its progress draft when it
+        changed since the last write. Never raises: a failed write is retried next time."""
+        if fields is not None:
+            self.remember_form(fields)
+        form = self.form
+        typed = bool((form.get("title") or "").strip() or (form.get("notes") or "").strip())
+        if not self.staged and not typed:
+            if self.draft_id is None:
+                return False
+            self._drop_progress()  # nothing left worth recovering
+            return True
+        items = [s.to_item() for s in self.staged]
+        snapshot = (sorted((k, repr(v)) for k, v in form.items()), repr(items))
+        if snapshot == self._last_written:
+            return False
+        repo_key = form.get("repo") or (self.repo_cfg.key if self.repo_cfg else None)
+        try:
+            self.draft_id = drafts.write_progress(self.draft_id, repo_key, form, items, launch_repo=self.launch_key)
+        except OSError:
+            return False
+        self._last_written = snapshot
+        return True
+
+    def remember_addition(self, report_id: Optional[int], note: str) -> None:
+        """Keep the "Add to existing" choice and note while live mode runs (not on disk)."""
+        self.addition = {"report_id": report_id, "note": note}
+
+    def _drop_progress(self) -> None:
+        if self.draft_id:
+            drafts.delete_draft(self.draft_id)
+        self.draft_id, self._last_written = None, None
 
     # --- the details step ------------------------------------------------------
 
@@ -202,9 +288,10 @@ class LiveSession:
             self.state = LiveState.READY
 
     def preview_media(self) -> list[Media]:
-        """Stand-ins for the staged media (numbered as they will be) to validate `@` references."""
-        return [Media(0, 0, n, None, s.kind, None, s.mime, s.size_bytes, None, "")
-                for n, s in enumerate(self.staged, start=1)]
+        """Stand-ins for the staged media, numbered by staging number, to validate `@`
+        references in the new-bug form. `save` maps them to the final indexes."""
+        return [Media(0, 0, s.number, None, s.kind, None, s.mime, s.size_bytes, None, "")
+                for s in self.staged]
 
     def save(self, fields: dict) -> Report:
         """Save a new report with the staged media (none for a note-only bug). Raises
@@ -228,7 +315,9 @@ class LiveSession:
                 store, title=title, tags=tags, repo=repo_key, status=fields.get("status") or "open",
             )
             try:
-                self._attach_all(store, report.id)
+                added = self._attach_all(store, report.id)
+                notes = refs.rewrite_references(notes, {
+                    str(s.number): refs.media_token(m) for s, m in zip(self.staged, added) if s.number != m.idx})
                 if notes:
                     service.set_notes(store, report.id, notes)
             except BaseException:
@@ -254,7 +343,7 @@ class LiveSession:
             refs.validate_references(note, existing + ahead)
             added = self._attach_all(store, report_id)
             report = service.append_note(store, report_id, note, added) if note else store.get(report_id)
-        self._finish(f"Added to report #{report_id}")
+        self._finish(f"Added to report #{report_id}", keep_form=True)
         return report
 
     def discard(self, confirmed: bool) -> bool:
@@ -262,9 +351,8 @@ class LiveSession:
         if self.state is not LiveState.DETAILS or not confirmed:
             return False
         self.clear_staged()
-        if self.draft_id:
-            drafts.delete_draft(self.draft_id)
-            self.draft_id = None
+        self._drop_progress()
+        self.form, self.addition = {}, {}
         self.state = LiveState.READY
         self.message = "Discarded."
         return True
@@ -286,13 +374,19 @@ class LiveSession:
     def _reset(self) -> None:
         self.state = LiveState.READY
 
-    def _finish(self, message: str) -> None:
-        if self.draft_id:
-            drafts.delete_draft(self.draft_id)
-        self.staged, self.draft_id = [], None
+    def _finish(self, message: str, keep_form: bool = False) -> None:
+        """After a save (or an add): the staged media are filed. Adding to an existing bug
+        keeps a remembered new-bug form, re-saved without the media that just went."""
+        self._drop_progress()
+        self.staged, self._last_number = [], 0
+        self.addition = {}
+        if not keep_form:
+            self.form = {}
         self.saved_count += 1
         self.state = LiveState.READY
         self.message = message
+        if keep_form:
+            self.autosave()
 
     def _attach_all(self, store: Store, report_id: int) -> list[Media]:
         """Attach every staged item in order; each is moved into the store first if it
@@ -330,4 +424,4 @@ def _into_store(s: Staged) -> Staged:
         folder.mkdir(parents=True, exist_ok=True)
         for n, (p, size) in enumerate(s.frames, start=1):
             frames.append((Path(shutil.move(str(p), folder / f"frame-{n:03d}.png")), size))
-    return Staged(s.kind, path, s.mime, s.size_bytes, frames, s.source, s.shared)
+    return Staged(s.kind, path, s.mime, s.size_bytes, frames, s.source, s.shared, s.number)

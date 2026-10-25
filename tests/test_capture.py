@@ -112,3 +112,56 @@ def test_capture_no_backend_mentions_setup(bugcap_home, monkeypatch):
     monkeypatch.setattr(backends, "detect", lambda: None)
     with pytest.raises(CaptureError, match="bugcap setup"):
         capture.capture_screenshot()
+
+
+# --- capture targets (live mode) ---------------------------------------------------
+
+from bugcap.screens import Monitor, Window  # noqa: E402
+from bugcap.targets import CaptureTarget  # noqa: E402
+
+MON2 = Monitor("DP-2", -1920, 0, 1920, 1080, False, 1)
+REGION = CaptureTarget("region", rect=(100, 50, 800, 600))
+WIN = CaptureTarget("window", window=Window("11", "Editor", 10, 20, 640, 480))
+
+
+def build(backend, target, platform="windows"):
+    return capture.build_screenshot_argv(backend, target, "D.png", platform=platform, raw="RAW.png")
+
+
+def test_screenshot_argv_without_a_target_is_unchanged():
+    assert build("flameshot", None) == [["flameshot", "gui", "--path", "D.png"]]
+    assert build("flameshot", CaptureTarget("all")) == [["flameshot", "gui", "--path", "D.png"]]
+    assert build("screencapture", None, "macos") == [["screencapture", "-i", "D.png"]]
+    assert build("satty", None, "linux") == [
+        ["grim", "RAW.png"], ["satty", "--filename", "RAW.png", "--output-filename", "D.png"]]
+
+
+def test_flameshot_targets():
+    assert build("flameshot", CaptureTarget("monitor", monitor=MON2)) == [
+        ["flameshot", "screen", "-n", "1", "-e", "--path", "D.png"]]
+    assert build("flameshot", REGION) == [["flameshot", "gui", "--region", "800x600+100+50", "--path", "D.png"]]
+    assert build("flameshot", WIN) == [["flameshot", "gui", "--region", "640x480+10+20", "--path", "D.png"]]
+
+
+def test_grim_targets():
+    shot = build("satty", CaptureTarget("monitor", monitor=MON2), "linux")
+    assert shot[0] == ["grim", "-o", "DP-2", "RAW.png"]
+    assert build("satty", REGION, "linux")[0] == ["grim", "-g", "100,50 800x600", "RAW.png"]
+    with pytest.raises(capture.TargetUnsupported):
+        build("satty", WIN, "linux")
+
+
+def test_screencapture_targets():
+    assert build("screencapture", CaptureTarget("monitor", monitor=MON2), "macos") == [
+        ["screencapture", "-D", "2", "D.png"]]
+    assert build("screencapture", REGION, "macos") == [["screencapture", "-R", "100,50,800,600", "D.png"]]
+    assert build("screencapture", WIN, "macos") == [["screencapture", "-i", "-w", "D.png"]]
+
+
+def test_capture_screenshot_runs_the_target_command(bugcap_home, monkeypatch):
+    monkeypatch.setattr(backends, "detect", lambda: backends.by_name("flameshot"))
+    monkeypatch.setattr(backends, "resolve", lambda name: None)
+    run = _fake_run_writing(-1)
+    monkeypatch.setattr(capture.subprocess, "run", run)
+    assert capture.capture_screenshot(REGION).exists()
+    assert run.calls[0][:4] == ["flameshot", "gui", "--region", "800x600+100+50"]

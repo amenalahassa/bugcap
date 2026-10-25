@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Live mode, attachments: remove a staged item (after a confirmation) from the control window or the bug form, and click any item, videos included, to open it in the OS default app. Staged items keep their `@` tag when another one is removed; the saved report renumbers them and rewrites the notes to match.
+- Live mode, remembered form: **Back** (or closing the bug form) no longer drops what was typed; the fields come back until **Save** or **Discard**. The bug in progress is autosaved as a draft every 2 seconds, so a crash or a quit loses nothing, and the next `bugcap live` offers it back. "Add to existing bug" remembers its bug and note across **Cancel** while live mode runs.
+- Live mode, capture target: Screenshot and Record first ask what to capture: all screens, one monitor, a drawn region or one window, with the last choice preselected. On multi-monitor Windows, Flameshot now opens on the chosen monitor; recordings (ffmpeg on Windows/X11, wf-recorder on Wayland) cover only the chosen target. Options a platform can't do are shown greyed out with the reason. Optional on Wayland: `slurp` to draw a region. Live mode is now DPI-aware on Windows so rectangles match on scaled displays.
+- Live mode, keyboard on a non-Latin layout (Windows): the control window's letter keys work by position, as on a US layout.
+- Live mode, shortcuts: every action has a key while a bugcap window has focus. In the control window: `S` Screenshot, `R` Record/Stop, `I` Upload image, `F` Attach file, `N` New bug, `E` Add to existing, `Del` Clear. In the forms: `Ctrl/⌘+Enter` Save/Add, `Esc` Back/Cancel, `Alt+D` Discard, `Alt+X`/`Alt+O` remove/open the selected item. Buttons show their key, and `F1` lists them all.
+
+### Fixed
+- Live mode: keeping staged captures as a draft no longer moves an uploaded file that is stored once and may belong to other reports; the draft gets its own copy.
+
 ## 0.6.0 - 2026-10-10
 
 ### Added
